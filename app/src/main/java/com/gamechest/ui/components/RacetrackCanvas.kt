@@ -37,20 +37,36 @@ fun RacetrackCanvas(
 ) {
     val isReverseHazards = activeMutators.contains(MutatorId.REVERSE_HAZARD_OVERDRIVE)
 
-    // Load background board artwork
-    val boardBitmap = ImageBitmap.imageResource(id = R.drawable.rev_up_racers_board)
-
-    // Load colorized top-down sports car token sprites
-    val carBitmaps = mapOf(
-        CarAvatar.SPEEDSTER_RED to ImageBitmap.imageResource(R.drawable.car_token_red),
-        CarAvatar.TURBO_BLUE to ImageBitmap.imageResource(R.drawable.car_token_blue),
-        CarAvatar.CYBER_YELLOW to ImageBitmap.imageResource(R.drawable.car_token_yellow),
-        CarAvatar.NITRO_GREEN to ImageBitmap.imageResource(R.drawable.car_token_green),
-        CarAvatar.APEX_PURPLE to ImageBitmap.imageResource(R.drawable.car_token_purple),
-        CarAvatar.MAGMA_ORANGE to ImageBitmap.imageResource(R.drawable.car_token_orange),
-        CarAvatar.NEON_CYAN to ImageBitmap.imageResource(R.drawable.car_token_cyan),
-        CarAvatar.HOT_PINK to ImageBitmap.imageResource(R.drawable.car_token_pink)
+    // Dynamically load board artwork and token sprites based on the active pack
+    val isSheepGame = layout.backgroundImageAsset?.contains("sheep") == true
+    val boardBitmap = ImageBitmap.imageResource(
+        id = if (isSheepGame) R.drawable.save_the_sheep_board else R.drawable.rev_up_racers_board
     )
+
+    // Load colorized game piece token sprites (Sheep or Sports Cars)
+    val tokenBitmaps = if (isSheepGame) {
+        mapOf(
+            CarAvatar.SPEEDSTER_RED to ImageBitmap.imageResource(R.drawable.sheep_token_red),
+            CarAvatar.TURBO_BLUE to ImageBitmap.imageResource(R.drawable.sheep_token_blue),
+            CarAvatar.CYBER_YELLOW to ImageBitmap.imageResource(R.drawable.sheep_token_yellow),
+            CarAvatar.NITRO_GREEN to ImageBitmap.imageResource(R.drawable.sheep_token_green),
+            CarAvatar.APEX_PURPLE to ImageBitmap.imageResource(R.drawable.sheep_token_purple),
+            CarAvatar.MAGMA_ORANGE to ImageBitmap.imageResource(R.drawable.sheep_token_orange),
+            CarAvatar.NEON_CYAN to ImageBitmap.imageResource(R.drawable.sheep_token_cyan),
+            CarAvatar.HOT_PINK to ImageBitmap.imageResource(R.drawable.sheep_token_pink)
+        )
+    } else {
+        mapOf(
+            CarAvatar.SPEEDSTER_RED to ImageBitmap.imageResource(R.drawable.car_token_red),
+            CarAvatar.TURBO_BLUE to ImageBitmap.imageResource(R.drawable.car_token_blue),
+            CarAvatar.CYBER_YELLOW to ImageBitmap.imageResource(R.drawable.car_token_yellow),
+            CarAvatar.NITRO_GREEN to ImageBitmap.imageResource(R.drawable.car_token_green),
+            CarAvatar.APEX_PURPLE to ImageBitmap.imageResource(R.drawable.car_token_purple),
+            CarAvatar.MAGMA_ORANGE to ImageBitmap.imageResource(R.drawable.car_token_orange),
+            CarAvatar.NEON_CYAN to ImageBitmap.imageResource(R.drawable.car_token_cyan),
+            CarAvatar.HOT_PINK to ImageBitmap.imageResource(R.drawable.car_token_pink)
+        )
+    }
 
     // Text paint with shadow for transparent background numbers
     val textPaint = remember {
@@ -256,13 +272,13 @@ fun RacetrackCanvas(
                 }
             }
 
-            // 5. Draw Fluid Driving Top-Down Sports Cars
-            val carWidth = (baseRadius * 1.55f).toInt()
-            val carHeight = (carWidth * 2.08f).toInt()
+            // 5. Draw Fluid Driving Game Piece Tokens (Sheep or Sports Cars)
+            val tokenWidth = (baseRadius * 1.55f).toInt()
+            val tokenHeight = if (isSheepGame) tokenWidth else (tokenWidth * 2.08f).toInt()
 
             players.forEachIndexed { pIdx, player ->
                 val carDriver = playerCarStates[player.profile.id]
-                val carBitmap = carBitmaps[player.profile.carAvatar] ?: carBitmaps[CarAvatar.SPEEDSTER_RED]!!
+                val tokenBitmap = tokenBitmaps[player.profile.carAvatar] ?: tokenBitmaps[CarAvatar.SPEEDSTER_RED]!!
 
                 val cx = if (carDriver != null) carDriver.animX.value * canvasW else {
                     val tile = layout.tiles.find { it.id == player.currentTileId } ?: layout.tiles.first()
@@ -272,9 +288,9 @@ fun RacetrackCanvas(
                     val tile = layout.tiles.find { it.id == player.currentTileId } ?: layout.tiles.first()
                     tile.y * canvasH
                 }
-                val carRotation = carDriver?.animAngle?.value ?: 0f
+                val tokenRotation = carDriver?.animAngle?.value ?: 0f
 
-                // Stagger cars side-by-side or behind each other when on the same node (Never overlapping/under)
+                // Stagger pieces side-by-side or behind each other when on the same node (Never overlapping/under)
                 val isMoving = carDriver?.animX?.isRunning == true || carDriver?.animY?.isRunning == true
                 val (drawX, drawY) = if (!isMoving && players.count { it.currentTileId == player.currentTileId } > 1) {
                     val sameTilePlayers = players.filter { it.currentTileId == player.currentTileId }
@@ -285,21 +301,21 @@ fun RacetrackCanvas(
                     val (offsetX, offsetY) = when (totalOnTile) {
                         2 -> {
                             // Side-by-side: left and right
-                            if (idxOnTile == 0) Pair(-carWidth * 0.65f, 0f) else Pair(carWidth * 0.65f, 0f)
+                            if (idxOnTile == 0) Pair(-tokenWidth * 0.65f, 0f) else Pair(tokenWidth * 0.65f, 0f)
                         }
                         3 -> {
                             // Front 2 side-by-side, 1 behind
                             when (idxOnTile) {
-                                0 -> Pair(-carWidth * 0.65f, -carHeight * 0.35f)
-                                1 -> Pair(carWidth * 0.65f, -carHeight * 0.35f)
-                                else -> Pair(0f, carHeight * 0.45f)
+                                0 -> Pair(-tokenWidth * 0.65f, -tokenHeight * 0.35f)
+                                1 -> Pair(tokenWidth * 0.65f, -tokenHeight * 0.35f)
+                                else -> Pair(0f, tokenHeight * 0.45f)
                             }
                         }
                         else -> {
                             // 2x2 Grid: 2 in front, 2 behind
                             val row = if (idxOnTile < 2) -1 else 1
                             val col = if (idxOnTile % 2 == 0) -1 else 1
-                            Pair(col * carWidth * 0.65f, row * carHeight * 0.45f)
+                            Pair(col * tokenWidth * 0.65f, row * tokenHeight * 0.45f)
                         }
                     }
                     Pair(cx + offsetX, cy + offsetY)
@@ -307,32 +323,32 @@ fun RacetrackCanvas(
                     Pair(cx, cy)
                 }
 
-                // Draw Ground Shadow under Car
+                // Draw Ground Shadow under Game Piece
                 drawCircle(
                     color = Color.Black.copy(alpha = 0.5f),
-                    radius = carWidth * 0.72f,
+                    radius = tokenWidth * 0.72f,
                     center = Offset(drawX, drawY + 2f)
                 )
 
-                // Draw Rotated Car Token Sprite
+                // Draw Rotated Game Piece Token Sprite
                 withTransform({
                     translate(drawX, drawY)
-                    rotate(carRotation, pivot = Offset.Zero)
+                    rotate(if (isSheepGame) 0f else tokenRotation, pivot = Offset.Zero)
                 }) {
                     drawImage(
-                        image = carBitmap,
-                        dstOffset = IntOffset(-carWidth / 2, -carHeight / 2),
-                        dstSize = IntSize(carWidth, carHeight)
+                        image = tokenBitmap,
+                        dstOffset = IntOffset(-tokenWidth / 2, -tokenHeight / 2),
+                        dstSize = IntSize(tokenWidth, tokenHeight)
                     )
                 }
 
-                // Draw Player Badge Indicator (P1, P2, etc.) Next to Car
+                // Draw Player Badge Indicator (P1, P2, etc.) Next to Game Piece
                 val badgeRadius = baseRadius * 0.55f
-                val badgeCenter = Offset(drawX + carWidth * 0.62f, drawY - carHeight * 0.36f)
-                val carThemeColor = Color(android.graphics.Color.parseColor(player.profile.carAvatar.colorHex))
+                val badgeCenter = Offset(drawX + tokenWidth * 0.62f, drawY - tokenHeight * 0.36f)
+                val tokenThemeColor = Color(android.graphics.Color.parseColor(player.profile.carAvatar.colorHex))
 
                 drawCircle(
-                    color = carThemeColor,
+                    color = tokenThemeColor,
                     radius = badgeRadius,
                     center = badgeCenter
                 )

@@ -21,8 +21,11 @@ class GamePackManager(
 
     init {
         // Register built-in packs
-        val defaultPack = TurboCircuitPack.createDefaultPack()
-        installedPacks[defaultPack.manifest.id] = defaultPack
+        val turboCircuit = TurboCircuitPack.createDefaultPack()
+        installedPacks[turboCircuit.manifest.id] = turboCircuit
+
+        val saveTheSheep = SaveTheSheepPack.createPack()
+        installedPacks[saveTheSheep.manifest.id] = saveTheSheep
     }
 
     fun getAllPacks(): List<GamePack> {

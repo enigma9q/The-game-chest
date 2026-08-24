@@ -60,7 +60,7 @@ class GameEngine(
         val isCustomGrid = mutators.contains(MutatorId.CUSTOM_GRID_DICE_LOADOUT)
         
         val playerStates = profiles.mapIndexed { index, profile ->
-            val startingTile = if (isCustomGrid && profile.customStartTile != null) {
+            val startingTile = if (profile.customStartTile != null) {
                 profile.customStartTile
             } else if (isCustomGrid) {
                 index.coerceAtMost(pack.tableLayout.finishTileId)
