@@ -9,13 +9,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,7 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +42,7 @@ import com.gamechest.ui.components.RacetrackCanvas
 import com.gamechest.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 @Composable
 fun GameBoardScreen(
@@ -53,7 +54,7 @@ fun GameBoardScreen(
     val state by engine.state.collectAsState()
     val scope = rememberCoroutineScope()
 
-    // 1. Lock Screen Orientation to Landscape for Game Board
+    // 1. Lock Screen Orientation to Landscape
     DisposableEffect(Unit) {
         val activity = context as? Activity
         val prevOrientation = activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -69,17 +70,39 @@ fun GameBoardScreen(
         mutableStateOf(prefs.getBoolean("quick_play_enabled", false))
     }
 
+    var quickPlayToastText by remember { mutableStateOf<String?>(null) }
     var isRollingAnimation by remember { mutableStateOf(false) }
     var selectedTileInfo by remember { mutableStateOf<TileNode?>(null) }
     var showMenuDialog by remember { mutableStateOf(false) }
+    var showWinDialog by remember { mutableStateOf(false) }
+    var showRollAgainBanner by remember { mutableStateOf(false) }
 
     val currentPlayer = state.players.getOrNull(state.currentTurnPlayerIndex)
 
-    // Quick Play auto-advance effect
+    // Quick Play Auto-Advance (Hold roll number for 1.2s before advancing)
     LaunchedEffect(state.turnPhase, isQuickPlayEnabled, state.extraRollAwarded) {
         if (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER && state.winnerPlayerId == null && !state.extraRollAwarded) {
-            delay(700)
+            delay(1200)
             engine.nextTurn()
+        }
+    }
+
+    // "ROLL AGAIN!" Banner Auto-Dismiss after 1.5 seconds
+    LaunchedEffect(state.extraRollAwarded) {
+        if (state.extraRollAwarded) {
+            showRollAgainBanner = true
+            delay(1500)
+            showRollAgainBanner = false
+        } else {
+            showRollAgainBanner = false
+        }
+    }
+
+    // Winner sequence: Wait for piece to arrive at finish before showing final victory dialog
+    LaunchedEffect(state.winnerPlayerId) {
+        if (state.winnerPlayerId != null) {
+            delay(2400)
+            showWinDialog = true
         }
     }
 
@@ -94,19 +117,13 @@ fun GameBoardScreen(
                     .padding(8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // ==================== LEFT SIDEBAR: MENU + PLAYER TURN QUEUE + QUICK PLAY ====================
-                LeftSidebar(
+                // ==================== LEFT SIDEBAR: MENU + PLAYER LIST ====================
+                LeftPlayersSidebar(
                     state = state,
-                    isQuickPlayEnabled = isQuickPlayEnabled,
-                    onToggleQuickPlay = {
-                        val newValue = !isQuickPlayEnabled
-                        isQuickPlayEnabled = newValue
-                        prefs.edit().putBoolean("quick_play_enabled", newValue).apply()
-                    },
                     onOpenMenu = { showMenuDialog = true }
                 )
 
-                // ==================== CENTER: RACETRACK CANVAS BOARD ====================
+                // ==================== CENTER: BOARD CANVAS ====================
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -151,10 +168,10 @@ fun GameBoardScreen(
                     }
                 }
 
-                // ==================== RIGHT: DICE AREA WITH ROLL HISTORY SIDEBAR ====================
+                // ==================== RIGHT: DICE AREA WITH QUICK PLAY & ROLLS LIST ====================
                 Surface(
                     modifier = Modifier
-                        .width(235.dp)
+                        .width(245.dp)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(18.dp)),
                     color = SurfaceDark
@@ -164,6 +181,16 @@ fun GameBoardScreen(
                         currentPlayer = currentPlayer,
                         isQuickPlayEnabled = isQuickPlayEnabled,
                         isRollingAnimation = isRollingAnimation,
+                        onToggleQuickPlay = {
+                            val newValue = !isQuickPlayEnabled
+                            isQuickPlayEnabled = newValue
+                            prefs.edit().putBoolean("quick_play_enabled", newValue).apply()
+                            quickPlayToastText = if (newValue) "⚡ QUICK PLAY ACTIVATED" else "⚡ QUICK PLAY DEACTIVATED"
+                            scope.launch {
+                                delay(1500)
+                                quickPlayToastText = null
+                            }
+                        },
                         onNextTurn = { engine.nextTurn() },
                         onRollDice = {
                             scope.launch {
@@ -182,16 +209,97 @@ fun GameBoardScreen(
                 }
             }
 
-            // ==================== ROLL AGAIN! CENTER-TO-SIDE ANIMATED OVERLAY ====================
-            AnimatedRollAgainBanner(
-                extraRollAwarded = state.extraRollAwarded,
-                reason = state.extraRollReason
-            )
+            // ==================== QUICK PLAY NOTIFICATION BANNER ====================
+            AnimatedVisibility(
+                visible = quickPlayToastText != null,
+                enter = scaleIn(tween(200)) + fadeIn(tween(150)),
+                exit = scaleOut(tween(200)) + fadeOut(tween(150)),
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
+                Card(
+                    modifier = Modifier
+                        .padding(top = 16.dp)
+                        .border(2.dp, if (isQuickPlayEnabled) NitroGreen else TextMuted, RoundedCornerShape(14.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xF20F172A)),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = if (isQuickPlayEnabled) NitroGreen else TextMuted,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = quickPlayToastText ?: "",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (isQuickPlayEnabled) NitroGreen else TextSecondary,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+
+            // ==================== ROLL AGAIN! 1.5s ANIMATED BANNER ====================
+            AnimatedVisibility(
+                visible = showRollAgainBanner,
+                enter = scaleIn(tween(250, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
+                exit = scaleOut(tween(200)) + fadeOut(tween(200)),
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                Card(
+                    modifier = Modifier
+                        .border(3.dp, NitroGreen, RoundedCornerShape(20.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xF40F172A)),
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 26.dp, vertical = 18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Bolt,
+                                contentDescription = null,
+                                tint = NitroGreen,
+                                modifier = Modifier.size(30.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "ROLL AGAIN!",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                color = NitroGreen,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = state.extraRollReason ?: "Bonus roll awarded!",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+
+            // ==================== CONFETTI EFFECT BURST ON WIN ====================
+            if (state.winnerPlayerId != null) {
+                ConfettiBurstEffect()
+            }
         }
     }
 
-    // Win Celebration Dialog
-    if (state.winnerPlayerId != null) {
+    // Final Win Celebration Dialog (Appears after piece has reached the finish)
+    if (showWinDialog && state.winnerPlayerId != null) {
         val winner = state.players.find { it.profile.id == state.winnerPlayerId }
         AlertDialog(
             onDismissRequest = {},
@@ -220,7 +328,10 @@ fun GameBoardScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { engine.restartGame(keepMutators = true) },
+                    onClick = {
+                        showWinDialog = false
+                        engine.restartGame(keepMutators = true)
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryNeon)
                 ) {
                     Text("Race Again", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
@@ -235,7 +346,7 @@ fun GameBoardScreen(
         )
     }
 
-    // Modern Centered Popup Menu Dialog
+    // Centered Popup Menu Dialog
     if (showMenuDialog) {
         GameMenuDialog(
             state = state,
@@ -253,28 +364,17 @@ fun GameBoardScreen(
 }
 
 /**
- * Left Sidebar: Menu Button (Top), Player Turn Queue (Middle), Thunder Quick Play (Bottom)
+ * Left Sidebar: Menu Button (Top) + All Players list with white outline & clearly visible names
  */
 @Composable
-private fun LeftSidebar(
+private fun LeftPlayersSidebar(
     state: GameSessionState,
-    isQuickPlayEnabled: Boolean,
-    onToggleQuickPlay: () -> Unit,
     onOpenMenu: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val players = state.players
-    val currentIdx = state.currentTurnPlayerIndex
-    val prevIdx = if (players.isNotEmpty()) (currentIdx - 1 + players.size) % players.size else 0
-    val nextIdx = if (players.isNotEmpty()) (currentIdx + 1) % players.size else 0
-
-    val prevPlayer = players.getOrNull(prevIdx)
-    val currPlayer = players.getOrNull(currentIdx)
-    val nextPlayer = players.getOrNull(nextIdx)
-
     Surface(
         modifier = modifier
-            .width(72.dp)
+            .width(74.dp)
             .fillMaxHeight()
             .clip(RoundedCornerShape(18.dp)),
         color = SurfaceDark
@@ -290,7 +390,7 @@ private fun LeftSidebar(
             IconButton(
                 onClick = onOpenMenu,
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(SurfaceDarkCard)
             ) {
@@ -302,111 +402,63 @@ private fun LeftSidebar(
                 )
             }
 
-            // MIDDLE: Player Turn Queue (Previous, Current Turn, Next)
+            // MIDDLE: Players List with White Outline Chips
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // 1. Previous Player (Smaller by 30%)
-                if (prevPlayer != null && players.size > 1) {
-                    PlayerQueueItem(
-                        player = prevPlayer,
-                        isCurrentTurn = false,
-                        subLabel = "PREV"
-                    )
-                }
+                state.players.forEachIndexed { idx, player ->
+                    val isCurrentTurn = idx == state.currentTurnPlayerIndex
+                    val carColor = Color(android.graphics.Color.parseColor(player.profile.carAvatar.colorHex))
 
-                // 2. Current Player (Active, Full Size)
-                if (currPlayer != null) {
-                    PlayerQueueItem(
-                        player = currPlayer,
-                        isCurrentTurn = true,
-                        subLabel = "TURN"
-                    )
-                }
-
-                // 3. Next Player (Smaller by 30%)
-                if (nextPlayer != null && players.size > 1 && nextPlayer != prevPlayer) {
-                    PlayerQueueItem(
-                        player = nextPlayer,
-                        isCurrentTurn = false,
-                        subLabel = "NEXT"
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .scale(if (isCurrentTurn) 1f else 0.68f)
+                            .alpha(if (isCurrentTurn) 1f else 0.6f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(carColor)
+                                .border(
+                                    width = if (isCurrentTurn) 2.5.dp else 1.2.dp,
+                                    color = Color.White,
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.DirectionsCar,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = player.profile.name,
+                            fontSize = 10.sp,
+                            fontWeight = if (isCurrentTurn) FontWeight.Black else FontWeight.Bold,
+                            color = if (isCurrentTurn) Color.White else TextSecondary,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 
-            // BOTTOM: Quick Play Thunder Icon Toggle Button
-            IconButton(
-                onClick = onToggleQuickPlay,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isQuickPlayEnabled) NitroGreen else SurfaceDarkCard)
-            ) {
-                Icon(
-                    Icons.Default.Bolt,
-                    contentDescription = "Quick Play",
-                    tint = if (isQuickPlayEnabled) Color(0xFF0F172A) else TextSecondary,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
-    }
-}
-
-@Composable
-private fun PlayerQueueItem(
-    player: PlayerRuntimeState,
-    isCurrentTurn: Boolean,
-    subLabel: String
-) {
-    val carColor = Color(android.graphics.Color.parseColor(player.profile.carAvatar.colorHex))
-    val avatarSize = if (isCurrentTurn) 40.dp else 28.dp
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.alpha(if (isCurrentTurn) 1f else 0.55f)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(avatarSize)
-                .clip(CircleShape)
-                .background(carColor)
-                .border(
-                    width = if (isCurrentTurn) 2.5.dp else 1.dp,
-                    color = if (isCurrentTurn) Color.White else Color.Transparent,
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.DirectionsCar,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(if (isCurrentTurn) 22.dp else 16.dp)
-            )
-        }
-
-        Text(
-            text = player.profile.name.take(6),
-            fontSize = if (isCurrentTurn) 11.sp else 8.5.sp,
-            fontWeight = if (isCurrentTurn) FontWeight.Black else FontWeight.Normal,
-            color = if (isCurrentTurn) carColor else TextSecondary,
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
-
-        Text(
-            text = subLabel,
-            fontSize = 7.5.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isCurrentTurn) NitroGreen else TextMuted
-        )
     }
 }
 
 /**
- * Right Dice Area: Scrollable Roll History Sidebar on Left + Centered Dice Roller
+ * Right Dice Area:
+ * - Top-Right: Quick Play Thunder toggle button (30% smaller)
+ * - Left side of area: Roll History Feed (transparent background, white outline, latest roll on top, older rolls 40% smaller, up/down arrows)
+ * - Center: Dice Box (replaced by WINNER! card on victory)
  */
 @Composable
 private fun RightDiceArea(
@@ -414,26 +466,29 @@ private fun RightDiceArea(
     currentPlayer: PlayerRuntimeState?,
     isQuickPlayEnabled: Boolean,
     isRollingAnimation: Boolean,
+    onToggleQuickPlay: () -> Unit,
     onNextTurn: () -> Unit,
     onRollDice: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val winner = state.players.find { it.profile.id == state.winnerPlayerId }
+
     Row(
         modifier = modifier
             .fillMaxSize()
             .padding(8.dp)
     ) {
-        // Roll History Vertical Sidebar
-        RollHistorySidebar(
+        // Roll History Vertical Sidebar with Transparent Background & White Outline
+        RollsHistorySidebar(
             state = state,
             modifier = Modifier
-                .width(46.dp)
+                .width(52.dp)
                 .fillMaxHeight()
         )
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        // Main Dice & Controls Column
+        // Main Dice & Actions Column
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -441,32 +496,92 @@ private fun RightDiceArea(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top: Next Racer Button
+            // TOP ROW: Next Racer Button (left) + Quick Play Thunder Button (top-right, 30% smaller)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Next Racer Button
                 if (!isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER && state.winnerPlayerId == null) {
                     Button(
                         onClick = onNextTurn,
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryNeon),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
                     ) {
-                        Text("Next >", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text("Next >", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     }
+                } else {
+                    Spacer(modifier = Modifier.width(1.dp))
+                }
+
+                // Quick Play Thunder Toggle Button (30% smaller: 32dp size)
+                IconButton(
+                    onClick = onToggleQuickPlay,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isQuickPlayEnabled) NitroGreen else Color(0x33FFFFFF))
+                        .border(1.dp, if (isQuickPlayEnabled) NitroGreen else Color(0x66FFFFFF), RoundedCornerShape(8.dp))
+                ) {
+                    Icon(
+                        Icons.Default.Bolt,
+                        contentDescription = "Quick Play",
+                        tint = if (isQuickPlayEnabled) Color(0xFF0F172A) else Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 
-            // Fixed Middle: Dice Box with "ROLL ?"
+            // MIDDLE: Dice Box OR Winner Display Card
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                if (state.winnerPlayerId == null) {
+                if (winner != null) {
+                    // Winner Display in Dice Area
+                    val winnerColor = Color(android.graphics.Color.parseColor(winner.profile.carAvatar.colorHex))
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp)
+                            .border(2.dp, AccentYellow, RoundedCornerShape(16.dp)),
+                        colors = CardDefaults.cardColors(containerColor = SurfaceDarkCard),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint = AccentYellow,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "WINNER!",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
+                                color = AccentYellow,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = winner.profile.name,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = winnerColor
+                            )
+                        }
+                    }
+                } else {
                     val isDiceActive = (state.turnPhase == TurnPhase.WAITING_FOR_ROLL) || (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER)
                     DiceRollerComponent(
                         diceSpec = state.currentActiveDiceSpec,
@@ -478,8 +593,8 @@ private fun RightDiceArea(
                 }
             }
 
-            // Bottom Player Tile position info
-            if (currentPlayer != null) {
+            // BOTTOM: Player Current Tile info
+            if (currentPlayer != null && winner == null) {
                 Text(
                     text = if (currentPlayer.currentTileId == 0) "Grid: Start (0)" else "Tile: ${currentPlayer.currentTileId} / ${state.pack.tableLayout.finishTileId}",
                     fontSize = 11.sp,
@@ -492,19 +607,25 @@ private fun RightDiceArea(
 }
 
 /**
- * Scrollable list of recent rolls with numbers in the player's avatar color
+ * Rolls History Sidebar:
+ * - Transparent background with clean white outline
+ * - Latest roll on TOP (full size)
+ * - Previous rolls smaller by 40%
+ * - Shows player prefix (e.g. P1: 6) with player color
+ * - Arrow up (↑) for Bridge shortcuts, Arrow down (↓) for Oil spill slides
  */
 @Composable
-private fun RollHistorySidebar(
+private fun RollsHistorySidebar(
     state: GameSessionState,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
+    val rollLogs = state.logHistory.filter { it.icon == "casino" }
 
     Surface(
         modifier = modifier
+            .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp)),
-        color = SurfaceDarkCard
+        color = Color.Transparent
     ) {
         Column(
             modifier = Modifier
@@ -514,14 +635,12 @@ private fun RollHistorySidebar(
         ) {
             Text(
                 text = "ROLLS",
-                fontSize = 8.sp,
+                fontSize = 8.5.sp,
                 fontWeight = FontWeight.Black,
-                color = TextMuted,
+                color = Color.White,
                 letterSpacing = 1.sp
             )
             Spacer(modifier = Modifier.height(4.dp))
-
-            val rollLogs = state.logHistory.filter { it.icon == "casino" }
 
             if (rollLogs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -529,33 +648,61 @@ private fun RollHistorySidebar(
                 }
             } else {
                 LazyColumn(
-                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(rollLogs) { log ->
+                    itemsIndexed(rollLogs) { idx, log ->
+                        val isLatest = idx == 0
                         val player = state.players.find { it.profile.id == log.playerId }
                         val playerColor = player?.let {
                             Color(android.graphics.Color.parseColor(it.profile.carAvatar.colorHex))
                         } ?: PrimaryNeon
 
                         val rollNumber = log.message.substringAfter("rolled ").substringBefore(" on").trim()
+                        val playerNum = player?.profile?.name?.filter { it.isDigit() }?.ifEmpty { "1" } ?: "1"
+
+                        // Check if this roll was accompanied by a bridge or oil spill in logs
+                        val hasBridge = state.logHistory.any { 
+                            it.playerId == log.playerId && Math.abs(it.timestamp - log.timestamp) < 5000 && it.message.contains("TURBO RAMP") 
+                        }
+                        val hasOil = state.logHistory.any { 
+                            it.playerId == log.playerId && Math.abs(it.timestamp - log.timestamp) < 5000 && it.message.contains("OIL SLICK") 
+                        }
+
+                        val chipHeight = if (isLatest) 30.dp else 20.dp
+                        val textSize = if (isLatest) 11.sp else 8.sp
 
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(playerColor.copy(alpha = 0.2f))
-                                .border(1.5.dp, playerColor, CircleShape),
+                                .fillMaxWidth(0.92f)
+                                .height(chipHeight)
+                                .scale(if (isLatest) 1f else 0.85f)
+                                .alpha(if (isLatest) 1f else 0.65f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(1.dp, if (isLatest) Color.White else Color(0x33FFFFFF), RoundedCornerShape(6.dp))
+                                .background(playerColor.copy(alpha = if (isLatest) 0.35f else 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = rollNumber,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Black,
-                                color = playerColor
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "P$playerNum: $rollNumber",
+                                    fontSize = textSize,
+                                    fontWeight = FontWeight.Black,
+                                    color = playerColor
+                                )
+
+                                if (hasBridge) {
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("↑", color = TurboCyan, fontSize = textSize, fontWeight = FontWeight.Black)
+                                } else if (hasOil) {
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("↓", color = HazardRed, fontSize = textSize, fontWeight = FontWeight.Black)
+                                }
+                            }
                         }
                     }
                 }
@@ -565,62 +712,50 @@ private fun RollHistorySidebar(
 }
 
 /**
- * Animated "ROLL AGAIN!" banner that zooms in center and slides to the side
+ * Confetti animation effect burst
  */
 @Composable
-private fun AnimatedRollAgainBanner(
-    extraRollAwarded: Boolean,
-    reason: String?
-) {
-    AnimatedVisibility(
-        visible = extraRollAwarded,
-        enter = scaleIn(tween(250, easing = FastOutSlowInEasing)) + fadeIn(tween(200)),
-        exit = scaleOut(tween(200)) + fadeOut(tween(200))
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                modifier = Modifier
-                    .border(3.dp, NitroGreen, RoundedCornerShape(20.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color(0xF40F172A)),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 26.dp, vertical = 18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Bolt,
-                            contentDescription = null,
-                            tint = NitroGreen,
-                            modifier = Modifier.size(30.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "ROLL AGAIN!",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            color = NitroGreen,
-                            letterSpacing = 1.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = reason ?: "Bonus roll awarded!",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
+private fun ConfettiBurstEffect() {
+    val particles = remember {
+        List(45) {
+            ConfettiParticle(
+                x = Random.nextFloat(),
+                y = Random.nextFloat(),
+                color = listOf(NitroGreen, TurboCyan, AccentYellow, HazardRed, ApexPurple, PrimaryNeon).random(),
+                size = Random.nextFloat() * 8f + 4f,
+                speedY = Random.nextFloat() * 2f + 1f
+            )
+        }
+    }
+
+    val transition = rememberInfiniteTransition(label = "confetti")
+    val animProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = LinearEasing), RepeatMode.Restart),
+        label = "confetti_fall"
+    )
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        particles.forEach { p ->
+            val curY = ((p.y + animProgress * p.speedY) % 1f) * size.height
+            val curX = p.x * size.width + Math.sin((animProgress * 10f + p.x * 5f).toDouble()).toFloat() * 20f
+            drawCircle(
+                color = p.color,
+                radius = p.size,
+                center = Offset(curX, curY)
+            )
         }
     }
 }
+
+private data class ConfettiParticle(
+    val x: Float,
+    val y: Float,
+    val color: Color,
+    val size: Float,
+    val speedY: Float
+)
 
 /**
  * Centered Modal Popup Game Menu Dialog

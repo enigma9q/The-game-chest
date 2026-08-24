@@ -212,64 +212,7 @@ fun RacetrackCanvas(
                 dstSize = IntSize(canvasW.toInt(), canvasH.toInt())
             )
 
-            // 2. Draw Turbo Bridges (Going UP / Shortcuts: from smaller to bigger)
-            layout.connections.filter { it.type == ConnectionType.TURBO_RAMP }.forEach { bridge ->
-                val from = layout.tiles.find { it.id == bridge.fromTileId }
-                val to = layout.tiles.find { it.id == bridge.toTileId }
-                if (from != null && to != null) {
-                    val p1 = Offset(from.x * canvasW, from.y * canvasH)
-                    val p2 = Offset(to.x * canvasW, to.y * canvasH)
-                    val bridgeColor = if (isReverseHazards) HazardRed else TurboCyan
-
-                    // Glow line & core trajectory line
-                    drawLine(
-                        color = bridgeColor.copy(alpha = 0.45f),
-                        start = p1,
-                        end = p2,
-                        strokeWidth = 9f,
-                        cap = StrokeCap.Round
-                    )
-                    drawLine(
-                        color = bridgeColor,
-                        start = p1,
-                        end = p2,
-                        strokeWidth = 4f,
-                        cap = StrokeCap.Round
-                    )
-                    drawCircle(bridgeColor, radius = 7f, center = p2)
-                    drawCircle(Color.White, radius = 3f, center = p2)
-                }
-            }
-
-            // 3. Draw Oil Spills (Going DOWN / Hazards: from bigger to smaller)
-            layout.connections.filter { it.type == ConnectionType.OIL_SLICK }.forEach { spill ->
-                val from = layout.tiles.find { it.id == spill.fromTileId }
-                val to = layout.tiles.find { it.id == spill.toTileId }
-                if (from != null && to != null) {
-                    val p1 = Offset(from.x * canvasW, from.y * canvasH)
-                    val p2 = Offset(to.x * canvasW, to.y * canvasH)
-                    val spillColor = if (isReverseHazards) NitroGreen else Color(0xFFFF2A85)
-
-                    drawLine(
-                        color = spillColor.copy(alpha = 0.4f),
-                        start = p1,
-                        end = p2,
-                        strokeWidth = 8f,
-                        cap = StrokeCap.Round
-                    )
-                    drawLine(
-                        color = spillColor,
-                        start = p1,
-                        end = p2,
-                        strokeWidth = 3.5f,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f),
-                        cap = StrokeCap.Round
-                    )
-                    drawCircle(spillColor, radius = 6.5f, center = p2)
-                }
-            }
-
-            // 4. Draw Tile Node Numbers with TRANSPARENT BACKGROUND, perfectly centered
+            // 2. Draw Tile Node Numbers with TRANSPARENT BACKGROUND, perfectly centered
             val baseRadius = (canvasW * 0.024f).coerceIn(12f, 24f)
             textPaint.textSize = baseRadius * 1.05f
 
