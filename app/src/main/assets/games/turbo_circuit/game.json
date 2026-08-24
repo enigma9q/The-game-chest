@@ -1,0 +1,143 @@
+{
+  "manifest": {
+    "id": "turbo_circuit_car_snakes_and_ladders",
+    "title": "Turbo Circuit: Car Snakes & Ladders",
+    "version": "1.0.0",
+    "description": "High-octane car racing board game inspired by Snakes & Ladders! Navigate 50 racetrack tiles with Turbo Boost ramps, beware of oil slick spinouts, and customize the race with 5 thrilling mutators.",
+    "category": "HYBRID_RACE",
+    "minPlayers": 1,
+    "maxPlayers": 4,
+    "supportedTransports": ["LOCAL_PASS_AND_PLAY", "WIFI_LAN", "BLUETOOTH"],
+    "defaultDiceSpec": {
+      "count": 1,
+      "sides": 6,
+      "modifier": 0,
+      "label": "1d6 (Standard)"
+    },
+    "availableMutators": [
+      {
+        "id": "CLASSIC_GRAND_PRIX",
+        "name": "1. Classic Grand Prix (1d6)",
+        "description": "Roll 1d6, advance step-by-step along the 50-tile track. Use turbo ramps and avoid oil slicks.",
+        "iconName": "speed",
+        "isActiveByDefault": true,
+        "forcedDiceType": "D6"
+      },
+      {
+        "id": "NITRO_TARGET_1D60",
+        "name": "2. Nitro Target (1d60 Full Range)",
+        "description": "Roll 1d60! Your car leaps directly to the rolled number. If you roll > 50, you overshoot and lose your turn! Hit 50 to win.",
+        "iconName": "bolt",
+        "isActiveByDefault": false,
+        "forcedDiceType": "D60"
+      },
+      {
+        "id": "NITRO_ASSIST_1D60",
+        "name": "3. Nitro Assist (1d60 Forward Only)",
+        "description": "Roll 1d60, but the lower roll value is locked to your current position. No backtracking! Faster race to the finish (roll > 50 still loses turn).",
+        "iconName": "rocket_launch",
+        "isActiveByDefault": false,
+        "forcedDiceType": "D60"
+      },
+      {
+        "id": "REVERSE_HAZARD_OVERDRIVE",
+        "name": "4. Reverse Hazard Overdrive",
+        "description": "Oil slicks grant nitro drift boosts forward (+distance), while turbo ramps overheat and send cars back into pit lane!",
+        "iconName": "swap_calls",
+        "isActiveByDefault": false
+      },
+      {
+        "id": "CUSTOM_GRID_DICE_LOADOUT",
+        "name": "5. Custom Grid & Dice Loadout",
+        "description": "Staggered starting grid (e.g. pole positions 1, 2, 3, 4) and custom dice assigned to each player (1d2 to 1d100).",
+        "iconName": "tune",
+        "isActiveByDefault": false
+      }
+    ],
+    "defaultMutatorId": "CLASSIC_GRAND_PRIX",
+    "previewImage": "preview.png"
+  },
+  "tableLayout": {
+    "layoutType": "RACETRACK_CIRCUIT",
+    "boardWidth": 1000.0,
+    "boardHeight": 1000.0,
+    "tilesCount": 50,
+    "startTileId": 0,
+    "finishTileId": 50,
+    "connections": [
+      {
+        "id": "ramp_1",
+        "fromTileId": 4,
+        "toTileId": 14,
+        "type": "TURBO_RAMP",
+        "title": "Turbo Boost Ramp",
+        "description": "Blasts your car forward 10 tiles!",
+        "effectOffset": 10
+      },
+      {
+        "id": "ramp_2",
+        "fromTileId": 12,
+        "toTileId": 28,
+        "type": "TURBO_RAMP",
+        "title": "Supercharger Tunnel",
+        "description": "High-speed shortcut past the chicane (+16)!",
+        "effectOffset": 16
+      },
+      {
+        "id": "ramp_3",
+        "fromTileId": 21,
+        "toTileId": 37,
+        "type": "TURBO_RAMP",
+        "title": "Nitro Flyover",
+        "description": "Soars over traffic (+16 tiles)!",
+        "effectOffset": 16
+      },
+      {
+        "id": "ramp_4",
+        "fromTileId": 33,
+        "toTileId": 46,
+        "type": "TURBO_RAMP",
+        "title": "Final Slingshot",
+        "description": "Rocketing toward the final stretch (+13)!",
+        "effectOffset": 13
+      },
+      {
+        "id": "slick_1",
+        "fromTileId": 18,
+        "toTileId": 6,
+        "type": "OIL_SLICK",
+        "title": "Oil Spill Spinout",
+        "description": "Car spins out of control (-12 tiles)!",
+        "effectOffset": -12
+      },
+      {
+        "id": "slick_2",
+        "fromTileId": 26,
+        "toTileId": 10,
+        "type": "OIL_SLICK",
+        "title": "Engine Overheat",
+        "description": "Forced pit lane cooldown (-16 tiles)!",
+        "effectOffset": -16
+      },
+      {
+        "id": "slick_3",
+        "fromTileId": 39,
+        "toTileId": 22,
+        "type": "OIL_SLICK",
+        "title": "Tire Blowout",
+        "description": "Pushed back to the repair bay (-17 tiles)!",
+        "effectOffset": -17
+      },
+      {
+        "id": "slick_4",
+        "fromTileId": 48,
+        "toTileId": 25,
+        "type": "OIL_SLICK",
+        "title": "Final Corner Crash",
+        "description": "Devastating barrier collision near the finish (-23 tiles)!",
+        "effectOffset": -23
+      }
+    ]
+  },
+  "rulesDescription": "Roll the dice to navigate through 50 track tiles. Land on Turbo Boost ramps to jump ahead, avoid Oil Slicks, or try Nitro Target mode with 1d60!"
+}
