@@ -241,11 +241,7 @@ fun LobbyScreen(
                                 availableMutators = gamePack.manifest.availableMutators,
                                 selectedMutators = selectedMutators,
                                 onMutatorToggled = { mutatorId ->
-                                    selectedMutators = if (selectedMutators.contains(mutatorId)) {
-                                        if (selectedMutators.size > 1) selectedMutators - mutatorId else selectedMutators
-                                    } else {
-                                        selectedMutators + mutatorId
-                                    }
+                                    selectedMutators = setOf(mutatorId)
                                 }
                             )
                         }
@@ -320,11 +316,7 @@ fun LobbyScreen(
                         availableMutators = gamePack.manifest.availableMutators,
                         selectedMutators = selectedMutators,
                         onMutatorToggled = { mutatorId ->
-                            selectedMutators = if (selectedMutators.contains(mutatorId)) {
-                                if (selectedMutators.size > 1) selectedMutators - mutatorId else selectedMutators
-                            } else {
-                                selectedMutators + mutatorId
-                            }
+                            selectedMutators = setOf(mutatorId)
                         }
                     )
                 }

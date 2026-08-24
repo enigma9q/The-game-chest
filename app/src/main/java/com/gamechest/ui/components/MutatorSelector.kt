@@ -104,14 +104,12 @@ fun MutatorSelector(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                Switch(
-                    checked = isSelected,
-                    onCheckedChange = { onMutatorToggled(mutator.id) },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = PrimaryNeon,
-                        checkedTrackColor = PrimaryNeon.copy(alpha = 0.3f),
-                        uncheckedThumbColor = TextMuted,
-                        uncheckedTrackColor = Color(0xFF1E293B)
+                RadioButton(
+                    selected = isSelected,
+                    onClick = { onMutatorToggled(mutator.id) },
+                    colors = RadioButtonDefaults.colors(
+                        selectedColor = PrimaryNeon,
+                        unselectedColor = TextMuted
                     )
                 )
             }
