@@ -452,7 +452,7 @@ fun LobbyScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            val newSpec = DiceSpec(1, selectedSides, 0, "1d$selectedSides")
+                            val newSpec = DiceSpec.custom(count = 1, sides = selectedSides)
                             players = players.toMutableList().also {
                                 it[pIdx] = player.copy(customDiceSpec = newSpec)
                             }
