@@ -5,11 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Casino
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,7 +34,7 @@ fun DiceRollerComponent(
     val infiniteTransition = rememberInfiniteTransition(label = "dice_pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isCurrentPlayerTurn && !isRolling) 1.06f else 1f,
+        targetValue = if (isCurrentPlayerTurn && !isRolling) 1.05f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -54,14 +50,15 @@ fun DiceRollerComponent(
 
     Column(
         modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
                 .scale(if (isCurrentPlayerTurn) pulseScale else 1f)
                 .rotate(rollRotation)
-                .size(90.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .size(86.dp)
+                .clip(RoundedCornerShape(22.dp))
                 .background(
                     Brush.verticalGradient(
                         colors = if (diceSpec.sides >= 60) {
@@ -78,7 +75,7 @@ fun DiceRollerComponent(
                     } else {
                         Brush.linearGradient(listOf(TextMuted, Color.Transparent))
                     },
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(22.dp)
                 )
                 .clickable(enabled = isCurrentPlayerTurn && !isRolling) {
                     onRollClick()
@@ -87,7 +84,7 @@ fun DiceRollerComponent(
         ) {
             if (isRolling) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(34.dp),
                     color = PrimaryNeon,
                     strokeWidth = 3.dp
                 )
@@ -98,34 +95,27 @@ fun DiceRollerComponent(
                     fontWeight = FontWeight.Black,
                     color = when {
                         lastRoll.isMax -> NitroGreen
-                        lastRoll.total > 50 && diceSpec.sides >= 60 -> HazardRed
+                        lastRoll.total > 49 && diceSpec.sides >= 60 -> HazardRed
                         else -> TextPrimary
                     }
                 )
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = if (diceSpec.sides >= 60) Icons.Default.Speed else Icons.Default.Casino,
-                        contentDescription = "Roll",
-                        tint = if (isCurrentPlayerTurn) PrimaryNeon else TextMuted,
-                        modifier = Modifier.size(32.dp)
-                    )
                     Text(
                         text = "ROLL",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isCurrentPlayerTurn) PrimaryNeon else TextMuted
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isCurrentPlayerTurn) PrimaryNeon else TextMuted,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "?",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isCurrentPlayerTurn) AccentYellow else TextMuted
                     )
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = diceSpec.label,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = if (isCurrentPlayerTurn) AccentYellow else TextSecondary
-        )
     }
 }

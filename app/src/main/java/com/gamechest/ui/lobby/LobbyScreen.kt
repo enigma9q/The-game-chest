@@ -1,5 +1,6 @@
 package com.gamechest.ui.lobby
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,6 +33,9 @@ fun LobbyScreen(
     onBrowsePacks: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     var transportMode by remember { mutableStateOf(TransportMode.SAME_DEVICE_LOCAL) }
     var selectedMutators by remember {
         mutableStateOf(setOf(gamePack.manifest.defaultMutatorId))
@@ -56,21 +61,21 @@ fun LobbyScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(horizontal = 20.dp, vertical = if (isLandscape) 8.dp else 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
                     Text(
                         text = "THE GAME CHEST",
-                        fontSize = 13.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryNeon,
                         letterSpacing = 1.5.sp
                     )
                     Text(
                         text = gamePack.manifest.title,
-                        fontSize = 20.sp,
+                        fontSize = if (isLandscape) 18.sp else 20.sp,
                         fontWeight = FontWeight.Black,
                         color = TextPrimary
                     )
@@ -86,98 +91,182 @@ fun LobbyScreen(
             }
         },
         bottomBar = {
-            Surface(
-                color = SurfaceDark,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Button(
-                    onClick = {
-                        onStartGame(players, selectedMutators, transportMode)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp)
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PrimaryNeon,
-                        contentColor = Color(0xFF0F172A)
-                    )
+            if (!isLandscape) {
+                Surface(
+                    color = SurfaceDark,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "START RACE",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp
-                    )
+                    Button(
+                        onClick = {
+                            onStartGame(players, selectedMutators, transportMode)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp)
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrimaryNeon,
+                            contentColor = Color(0xFF0F172A)
+                        )
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "START RACE",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp
+                        )
+                    }
                 }
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            // Mode Selector
-            item {
-                Text(
-                    text = "Multiplayer Mode",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+        if (isLandscape) {
+            // LANDSCAPE: 2-COLUMN RESPONSIVE LAYOUT
+            Row(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Left Column: Mode Selector, Racers & Start Button
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    listOf(
-                        Triple(TransportMode.SAME_DEVICE_LOCAL, "Same Device", Icons.Default.PhoneAndroid),
-                        Triple(TransportMode.WIFI_LAN, "Wi-Fi Coop", Icons.Default.Wifi),
-                        Triple(TransportMode.BLUETOOTH, "Bluetooth", Icons.Default.Bluetooth)
-                    ).forEach { (mode, label, icon) ->
-                        val isSelected = transportMode == mode
-                        Button(
-                            onClick = { transportMode = mode },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) PrimaryNeon else SurfaceDarkCard,
-                                contentColor = if (isSelected) Color(0xFF0F172A) else TextSecondary
-                            ),
-                            contentPadding = PaddingValues(4.dp)
-                        ) {
-                            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        item {
+                            MultiplayerModeRow(
+                                transportMode = transportMode,
+                                onSelectMode = { transportMode = it }
+                            )
+                        }
+                        item {
+                            RacersHeader(
+                                playerCount = players.size,
+                                onAddPlayer = {
+                                    if (players.size < 4) {
+                                        val takenAvatars = players.map { it.carAvatar }.toSet()
+                                        val nextAvatar = CarAvatar.entries.find { !takenAvatars.contains(it) } ?: CarAvatar.SPEEDSTER_RED
+                                        val nextIdx = players.size + 1
+                                        players = players + PlayerProfile(
+                                            id = "p$nextIdx",
+                                            name = "Player $nextIdx",
+                                            carAvatar = nextAvatar,
+                                            customStartTile = 0
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                        itemsIndexed(players) { index, player ->
+                            RacerCard(
+                                player = player,
+                                index = index,
+                                canRemove = players.size > 1,
+                                isCustomLoadoutActive = isCustomLoadoutActive,
+                                onColorClick = { showColorDialogForPlayerIndex = index },
+                                onDiceClick = { showDiceDialogForPlayerIndex = index },
+                                onNameChange = { newName ->
+                                    players = players.toMutableList().also {
+                                        it[index] = player.copy(name = newName)
+                                    }
+                                },
+                                onRemove = {
+                                    if (players.size > 1) {
+                                        players = players.filterIndexed { i, _ -> i != index }
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    // Start Race Button
+                    Button(
+                        onClick = {
+                            onStartGame(players, selectedMutators, transportMode)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrimaryNeon,
+                            contentColor = Color(0xFF0F172A)
+                        )
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "START RACE",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+
+                // Right Column: Mutator Selector
+                Surface(
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(16.dp)),
+                    color = SurfaceDark
+                ) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        item {
+                            Text(
+                                text = "Race Mutators & Rules",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        }
+                        item {
+                            MutatorSelector(
+                                availableMutators = gamePack.manifest.availableMutators,
+                                selectedMutatorIds = selectedMutators,
+                                onMutatorsChanged = { selectedMutators = it }
+                            )
                         }
                     }
                 }
             }
-
-            // Player Seats
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Racers (${players.size}/4)",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+        } else {
+            // PORTRAIT: SINGLE COLUMN SCROLLABLE LAYOUT
+            LazyColumn(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                item {
+                    MultiplayerModeRow(
+                        transportMode = transportMode,
+                        onSelectMode = { transportMode = it }
                     )
-                    if (players.size < 4) {
-                        TextButton(
-                            onClick = {
+                }
+
+                item {
+                    RacersHeader(
+                        playerCount = players.size,
+                        onAddPlayer = {
+                            if (players.size < 4) {
                                 val takenAvatars = players.map { it.carAvatar }.toSet()
                                 val nextAvatar = CarAvatar.entries.find { !takenAvatars.contains(it) } ?: CarAvatar.SPEEDSTER_RED
                                 val nextIdx = players.size + 1
@@ -188,237 +277,101 @@ fun LobbyScreen(
                                     customStartTile = 0
                                 )
                             }
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add Racer", color = PrimaryNeon)
                         }
-                    }
+                    )
                 }
-            }
 
-            itemsIndexed(players) { index, player ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Car Avatar Badge - opens available colors picker
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(CircleShape)
-                                .background(Color(android.graphics.Color.parseColor(player.carAvatar.colorHex)))
-                                .border(2.dp, Color.White.copy(alpha = 0.8f), CircleShape)
-                                .clickable {
-                                    showColorDialogForPlayerIndex = index
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.DirectionsCar,
-                                contentDescription = "Pick Color",
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = player.name,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "${player.carAvatar.displayName}${if (isCustomLoadoutActive) " • Start: Tile ${player.customStartTile ?: 1} • Dice: ${player.customDiceSpec?.label ?: "Default"}" else ""}",
-                                fontSize = 12.sp,
-                                color = TextSecondary
-                            )
-                        }
-
-                        if (isCustomLoadoutActive) {
-                            IconButton(onClick = { showDiceDialogForPlayerIndex = index }) {
-                                Icon(Icons.Default.Casino, contentDescription = "Pick Dice", tint = AccentYellow)
+                itemsIndexed(players) { index, player ->
+                    RacerCard(
+                        player = player,
+                        index = index,
+                        canRemove = players.size > 1,
+                        isCustomLoadoutActive = isCustomLoadoutActive,
+                        onColorClick = { showColorDialogForPlayerIndex = index },
+                        onDiceClick = { showDiceDialogForPlayerIndex = index },
+                        onNameChange = { newName ->
+                            players = players.toMutableList().also {
+                                it[index] = player.copy(name = newName)
+                            }
+                        },
+                        onRemove = {
+                            if (players.size > 1) {
+                                players = players.filterIndexed { i, _ -> i != index }
                             }
                         }
-
-                        if (players.size > 1) {
-                            IconButton(
-                                onClick = {
-                                    val updated = players.toMutableList()
-                                    updated.removeAt(index)
-                                    players = updated
-                                }
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Remove", tint = TextMuted)
-                            }
-                        }
-                    }
+                    )
                 }
-            }
 
-            // Mutators Panel (5 Presets)
-            item {
-                MutatorSelector(
-                    availableMutators = gamePack.manifest.availableMutators,
-                    selectedMutators = selectedMutators,
-                    onMutatorToggled = { mutatorId ->
-                        selectedMutators = if (selectedMutators.contains(mutatorId)) {
-                            selectedMutators - mutatorId
-                        } else {
-                            // If toggling 1d60 modes, ensure exclusivity between classic 1d6 and target 1d60
-                            if (mutatorId == MutatorId.NITRO_TARGET_1D60) {
-                                (selectedMutators - MutatorId.NITRO_ASSIST_1D60 - MutatorId.CLASSIC_GRAND_PRIX) + mutatorId
-                            } else if (mutatorId == MutatorId.NITRO_ASSIST_1D60) {
-                                (selectedMutators - MutatorId.NITRO_TARGET_1D60 - MutatorId.CLASSIC_GRAND_PRIX) + mutatorId
-                            } else if (mutatorId == MutatorId.CLASSIC_GRAND_PRIX) {
-                                (selectedMutators - MutatorId.NITRO_TARGET_1D60 - MutatorId.NITRO_ASSIST_1D60) + mutatorId
-                            } else {
-                                selectedMutators + mutatorId
-                            }
-                        }
-                    }
-                )
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
+                item {
+                    Text(
+                        text = "Game Mutators",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    MutatorSelector(
+                        availableMutators = gamePack.manifest.availableMutators,
+                        selectedMutatorIds = selectedMutators,
+                        onMutatorsChanged = { selectedMutators = it }
+                    )
+                }
             }
         }
     }
 
-    // Dice Picker Dialog for Mutator 5
-    if (showDiceDialogForPlayerIndex != null) {
-        val targetIdx = showDiceDialogForPlayerIndex!!
-        val targetPlayer = players.getOrNull(targetIdx)
-        if (targetPlayer != null) {
-            AlertDialog(
-                onDismissRequest = { showDiceDialogForPlayerIndex = null },
-                title = {
-                    Text("Select Dice for ${targetPlayer.name}", fontWeight = FontWeight.Bold, color = TextPrimary)
-                },
-                text = {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(StandardDiceType.entries.size) { i ->
-                            val diceType = StandardDiceType.entries[i]
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val updated = players.toMutableList()
-                                        updated[targetIdx] = targetPlayer.copy(
-                                            customDiceSpec = DiceSpec.standard(diceType)
-                                        )
-                                        players = updated
-                                        showDiceDialogForPlayerIndex = null
-                                    },
-                                colors = CardDefaults.cardColors(containerColor = SurfaceDarkCard)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Casino, contentDescription = null, tint = PrimaryNeon)
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(diceType.displayName, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showDiceDialogForPlayerIndex = null }) {
-                        Text("Close", color = PrimaryNeon)
-                    }
-                },
-                containerColor = SurfaceDark
-            )
-        }
-    }
-
-    // Available Car Color Picker Dialog (Filters only remaining untaken colors)
-    if (showColorDialogForPlayerIndex != null) {
-        val targetIdx = showColorDialogForPlayerIndex!!
-        val targetPlayer = players.getOrNull(targetIdx)
-        if (targetPlayer != null) {
-            val takenColors = players.mapIndexedNotNull { i, p -> if (i != targetIdx) p.carAvatar else null }.toSet()
-            val availableColors = CarAvatar.entries.filter { !takenColors.contains(it) }
+    // Color Selection Dialog
+    showColorDialogForPlayerIndex?.let { pIdx ->
+        val player = players.getOrNull(pIdx)
+        if (player != null) {
+            val takenAvatars = players.filterIndexed { i, _ -> i != pIdx }.map { it.carAvatar }.toSet()
+            val availableAvatars = CarAvatar.entries.filter { !takenAvatars.contains(it) }
 
             AlertDialog(
                 onDismissRequest = { showColorDialogForPlayerIndex = null },
+                containerColor = SurfaceDarkCard,
                 title = {
-                    Text("Select Color for ${targetPlayer.name}", fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(
+                        text = "Choose Color for ${player.name}",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
                 },
                 text = {
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "${availableColors.size} color${if (availableColors.size != 1) "s" else ""} available",
+                            text = "Select from available racer colors:",
                             fontSize = 13.sp,
-                            color = TextMuted
+                            color = TextSecondary
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(availableColors.size) { i ->
-                                val avatar = availableColors[i]
-                                val isCurrent = targetPlayer.carAvatar == avatar
-                                Card(
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            availableAvatars.forEach { avatar ->
+                                val color = Color(android.graphics.Color.parseColor(avatar.colorHex))
+                                val isCurrent = player.carAvatar == avatar
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .border(
+                                            width = if (isCurrent) 3.dp else 1.dp,
+                                            color = if (isCurrent) Color.White else Color.Transparent,
+                                            shape = CircleShape
+                                        )
                                         .clickable {
-                                            val updated = players.toMutableList()
-                                            updated[targetIdx] = targetPlayer.copy(carAvatar = avatar)
-                                            players = updated
+                                            players = players.toMutableList().also {
+                                                it[pIdx] = player.copy(carAvatar = avatar)
+                                            }
                                             showColorDialogForPlayerIndex = null
                                         },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isCurrent) SurfaceDarkCard else Color(0xFF0F172A)
-                                    ),
-                                    border = if (isCurrent) androidx.compose.foundation.BorderStroke(2.dp, PrimaryNeon) else null
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(android.graphics.Color.parseColor(avatar.colorHex))),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Default.DirectionsCar,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(14.dp))
-                                        Text(
-                                            text = avatar.displayName,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 14.sp,
-                                            color = TextPrimary
-                                        )
-                                        if (isCurrent) {
-                                            Spacer(modifier = Modifier.weight(1f))
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = "Selected",
-                                                tint = PrimaryNeon,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
+                                    if (isCurrent) {
+                                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -427,11 +380,237 @@ fun LobbyScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = { showColorDialogForPlayerIndex = null }) {
-                        Text("Cancel", color = TextSecondary)
+                        Text("Close", color = PrimaryNeon)
+                    }
+                }
+            )
+        }
+    }
+
+    // Custom Dice Spec Dialog for Player
+    showDiceDialogForPlayerIndex?.let { pIdx ->
+        val player = players.getOrNull(pIdx)
+        if (player != null) {
+            var selectedSides by remember { mutableStateOf(player.customDiceSpec?.sides ?: 6) }
+            AlertDialog(
+                onDismissRequest = { showDiceDialogForPlayerIndex = null },
+                containerColor = SurfaceDarkCard,
+                title = {
+                    Text(
+                        text = "Custom Dice for ${player.name}",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Assign a custom die to this player:",
+                            fontSize = 13.sp,
+                            color = TextSecondary
+                        )
+                        val diceOptions = listOf(2, 4, 6, 8, 10, 12, 20, 60, 100)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            diceOptions.take(5).forEach { sides ->
+                                FilterChip(
+                                    selected = selectedSides == sides,
+                                    onClick = { selectedSides = sides },
+                                    label = { Text("d$sides") }
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            diceOptions.drop(5).forEach { sides ->
+                                FilterChip(
+                                    selected = selectedSides == sides,
+                                    onClick = { selectedSides = sides },
+                                    label = { Text("d$sides") }
+                                )
+                            }
+                        }
                     }
                 },
-                containerColor = SurfaceDark
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val newSpec = DiceSpec(1, selectedSides, 0, "1d$selectedSides")
+                            players = players.toMutableList().also {
+                                it[pIdx] = player.copy(customDiceSpec = newSpec)
+                            }
+                            showDiceDialogForPlayerIndex = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryNeon, contentColor = Color(0xFF0F172A))
+                    ) {
+                        Text("Apply")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDiceDialogForPlayerIndex = null }) {
+                        Text("Cancel", color = TextMuted)
+                    }
+                }
             )
+        }
+    }
+}
+
+@Composable
+private fun MultiplayerModeRow(
+    transportMode: TransportMode,
+    onSelectMode: (TransportMode) -> Unit
+) {
+    Text(
+        text = "Multiplayer Mode",
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Bold,
+        color = TextPrimary
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        listOf(
+            Triple(TransportMode.SAME_DEVICE_LOCAL, "Same Device", Icons.Default.PhoneAndroid),
+            Triple(TransportMode.WIFI_LAN, "Wi-Fi Coop", Icons.Default.Wifi),
+            Triple(TransportMode.BLUETOOTH, "Bluetooth", Icons.Default.Bluetooth)
+        ).forEach { (mode, label, icon) ->
+            val isSelected = transportMode == mode
+            Button(
+                onClick = { onSelectMode(mode) },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSelected) PrimaryNeon else SurfaceDarkCard,
+                    contentColor = if (isSelected) Color(0xFF0F172A) else TextSecondary
+                ),
+                contentPadding = PaddingValues(4.dp)
+            ) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RacersHeader(
+    playerCount: Int,
+    onAddPlayer: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Racers ($playerCount/4)",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextPrimary
+        )
+        if (playerCount < 4) {
+            TextButton(onClick = onAddPlayer) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Add Racer", color = PrimaryNeon, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RacerCard(
+    player: PlayerProfile,
+    index: Int,
+    canRemove: Boolean,
+    isCustomLoadoutActive: Boolean,
+    onColorClick: () -> Unit,
+    onDiceClick: () -> Unit,
+    onNameChange: (String) -> Unit,
+    onRemove: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Car Avatar Badge
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color(android.graphics.Color.parseColor(player.carAvatar.colorHex)))
+                    .border(2.dp, Color.White, CircleShape)
+                    .clickable { onColorClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.DirectionsCar,
+                    contentDescription = "Change Color",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = player.name,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = player.carAvatar.displayName,
+                    fontSize = 11.sp,
+                    color = TextSecondary
+                )
+            }
+
+            if (isCustomLoadoutActive) {
+                val diceLabel = player.customDiceSpec?.label ?: "1d6"
+                OutlinedButton(
+                    onClick = onDiceClick,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text(diceLabel, fontSize = 11.sp, color = AccentYellow)
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+
+            if (canRemove) {
+                IconButton(
+                    onClick = onRemove,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Remove",
+                        tint = TextMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
