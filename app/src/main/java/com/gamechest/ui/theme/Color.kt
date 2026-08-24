@@ -14,6 +14,7 @@ val NitroGreen = Color(0xFF10B981)
 val HazardRed = Color(0xFFEF4444)
 val TurboCyan = Color(0xFF06B6D4)
 val CheckpointPurple = Color(0xFF8B5CF6)
+val ApexPurple = Color(0xFF8B5CF6)
 
 val TextPrimary = Color(0xFFF8FAFC)
 val TextSecondary = Color(0xFF94A3B8)
