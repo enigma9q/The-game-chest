@@ -239,8 +239,14 @@ fun LobbyScreen(
                         item {
                             MutatorSelector(
                                 availableMutators = gamePack.manifest.availableMutators,
-                                selectedMutatorIds = selectedMutators,
-                                onMutatorsChanged = { selectedMutators = it }
+                                selectedMutators = selectedMutators,
+                                onMutatorToggled = { mutatorId ->
+                                    selectedMutators = if (selectedMutators.contains(mutatorId)) {
+                                        if (selectedMutators.size > 1) selectedMutators - mutatorId else selectedMutators
+                                    } else {
+                                        selectedMutators + mutatorId
+                                    }
+                                }
                             )
                         }
                     }
@@ -312,8 +318,14 @@ fun LobbyScreen(
                     Spacer(modifier = Modifier.height(10.dp))
                     MutatorSelector(
                         availableMutators = gamePack.manifest.availableMutators,
-                        selectedMutatorIds = selectedMutators,
-                        onMutatorsChanged = { selectedMutators = it }
+                        selectedMutators = selectedMutators,
+                        onMutatorToggled = { mutatorId ->
+                            selectedMutators = if (selectedMutators.contains(mutatorId)) {
+                                if (selectedMutators.size > 1) selectedMutators - mutatorId else selectedMutators
+                            } else {
+                                selectedMutators + mutatorId
+                            }
+                        }
                     )
                 }
             }
