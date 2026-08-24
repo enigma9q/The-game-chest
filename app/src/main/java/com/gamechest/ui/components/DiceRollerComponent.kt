@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,13 +30,14 @@ fun DiceRollerComponent(
     lastRoll: DiceRollResult?,
     isRolling: Boolean,
     isCurrentPlayerTurn: Boolean,
+    extraRollAwarded: Boolean = false,
     onRollClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "dice_pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isCurrentPlayerTurn && !isRolling) 1.05f else 1f,
+        targetValue = if (isCurrentPlayerTurn && !isRolling) 1.06f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -61,7 +64,9 @@ fun DiceRollerComponent(
                 .clip(RoundedCornerShape(22.dp))
                 .background(
                     Brush.verticalGradient(
-                        colors = if (diceSpec.sides >= 60) {
+                        colors = if (extraRollAwarded) {
+                            listOf(Color(0xFF064E3B), Color(0xFF0F172A))
+                        } else if (diceSpec.sides >= 60) {
                             listOf(Color(0xFF1E1B4B), Color(0xFF4338CA))
                         } else {
                             listOf(Color(0xFF1E293B), Color(0xFF0F172A))
@@ -70,7 +75,9 @@ fun DiceRollerComponent(
                 )
                 .border(
                     width = if (isCurrentPlayerTurn) 3.dp else 1.5.dp,
-                    brush = if (isCurrentPlayerTurn) {
+                    brush = if (extraRollAwarded) {
+                        Brush.linearGradient(listOf(NitroGreen, TurboCyan))
+                    } else if (isCurrentPlayerTurn) {
                         Brush.linearGradient(listOf(PrimaryNeon, SecondaryOrange))
                     } else {
                         Brush.linearGradient(listOf(TextMuted, Color.Transparent))
@@ -88,6 +95,30 @@ fun DiceRollerComponent(
                     color = PrimaryNeon,
                     strokeWidth = 3.dp
                 )
+            } else if (extraRollAwarded) {
+                // When 6 is rolled, 6 goes away and ROLL AGAIN! is visible on the dice
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "ROLL",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        color = NitroGreen,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "AGAIN!",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Black,
+                        color = NitroGreen,
+                        letterSpacing = 1.sp
+                    )
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = NitroGreen,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             } else if (lastRoll != null) {
                 Text(
                     text = "${lastRoll.total}",

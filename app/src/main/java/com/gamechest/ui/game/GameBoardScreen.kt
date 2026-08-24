@@ -518,14 +518,15 @@ private fun RightDiceArea(
                     Spacer(modifier = Modifier.width(1.dp))
                 }
 
-                // Quick Play Thunder Toggle Button (30% smaller: 32dp size)
+                // Quick Play Thunder Toggle Button (30% smaller, icon same size with padding)
                 IconButton(
                     onClick = onToggleQuickPlay,
                     modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(6.dp))
                         .background(if (isQuickPlayEnabled) NitroGreen else Color(0x33FFFFFF))
-                        .border(1.dp, if (isQuickPlayEnabled) NitroGreen else Color(0x66FFFFFF), RoundedCornerShape(8.dp))
+                        .border(1.dp, if (isQuickPlayEnabled) NitroGreen else Color(0x66FFFFFF), RoundedCornerShape(6.dp))
+                        .padding(2.dp)
                 ) {
                     Icon(
                         Icons.Default.Bolt,
@@ -589,6 +590,7 @@ private fun RightDiceArea(
                         lastRoll = state.currentRollResult,
                         isRolling = isRollingAnimation,
                         isCurrentPlayerTurn = isDiceActive,
+                        extraRollAwarded = state.extraRollAwarded,
                         onRollClick = onRollDice
                     )
                 }
@@ -609,11 +611,10 @@ private fun RightDiceArea(
 
 /**
  * Rolls History Sidebar:
- * - Transparent background with clean white outline
- * - Latest roll on TOP (full size)
- * - Previous rolls smaller by 40%
- * - Shows player prefix (e.g. P1: 6) with player color
- * - Arrow up (↑) for Bridge shortcuts, Arrow down (↓) for Oil spill slides
+ * - Outline of the rolls list container removed
+ * - Square cards with only the number in center
+ * - Bottom right: Refresh circle icon if 6 was rolled, up/down arrows if bridge/oil used
+ * - Latest roll on TOP (full size), older rolls smaller by 40%
  */
 @Composable
 private fun RollsHistorySidebar(
@@ -622,88 +623,100 @@ private fun RollsHistorySidebar(
 ) {
     val rollLogs = state.logHistory.filter { it.icon == "casino" }
 
-    Surface(
+    Column(
         modifier = modifier
-            .border(1.2.dp, Color(0x44FFFFFF), RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp)),
-        color = Color.Transparent
+            .fillMaxHeight()
+            .padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(vertical = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "ROLLS",
-                fontSize = 8.5.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "ROLLS",
+            fontSize = 8.5.sp,
+            fontWeight = FontWeight.Black,
+            color = Color.White,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
 
-            if (rollLogs.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("-", color = TextMuted, fontSize = 12.sp)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    itemsIndexed(rollLogs) { idx, log ->
-                        val isLatest = idx == 0
-                        val player = state.players.find { it.profile.id == log.playerId }
-                        val playerColor = player?.let {
-                            Color(android.graphics.Color.parseColor(it.profile.carAvatar.colorHex))
-                        } ?: PrimaryNeon
+        if (rollLogs.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("-", color = TextMuted, fontSize = 12.sp)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                itemsIndexed(rollLogs) { idx, log ->
+                    val isLatest = idx == 0
+                    val player = state.players.find { it.profile.id == log.playerId }
+                    val playerColor = player?.let {
+                        Color(android.graphics.Color.parseColor(it.profile.carAvatar.colorHex))
+                    } ?: PrimaryNeon
 
-                        val rollNumber = log.message.substringAfter("rolled ").substringBefore(" on").trim()
-                        val playerNum = player?.profile?.name?.filter { it.isDigit() }?.ifEmpty { "1" } ?: "1"
+                    val rollNumber = log.message.substringAfter("rolled ").substringBefore(" on").trim()
+                    val isSix = rollNumber == "6"
 
-                        // Check if this roll was accompanied by a bridge or oil spill in logs
-                        val hasBridge = state.logHistory.any { 
-                            it.playerId == log.playerId && Math.abs(it.timestamp - log.timestamp) < 5000 && it.message.contains("TURBO RAMP") 
-                        }
-                        val hasOil = state.logHistory.any { 
-                            it.playerId == log.playerId && Math.abs(it.timestamp - log.timestamp) < 5000 && it.message.contains("OIL SLICK") 
-                        }
+                    // Check if this roll was accompanied by a bridge or oil spill in logs
+                    val hasBridge = state.logHistory.any { 
+                        it.playerId == log.playerId && Math.abs(it.timestamp - log.timestamp) < 5000 && it.message.contains("TURBO RAMP") 
+                    }
+                    val hasOil = state.logHistory.any { 
+                        it.playerId == log.playerId && Math.abs(it.timestamp - log.timestamp) < 5000 && it.message.contains("OIL SLICK") 
+                    }
 
-                        val chipHeight = if (isLatest) 30.dp else 20.dp
-                        val textSize = if (isLatest) 11.sp else 8.sp
+                    val squareSize = if (isLatest) 34.dp else 22.dp
+                    val textSize = if (isLatest) 15.sp else 10.sp
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.92f)
-                                .height(chipHeight)
-                                .scale(if (isLatest) 1f else 0.85f)
-                                .alpha(if (isLatest) 1f else 0.65f)
-                                .clip(RoundedCornerShape(6.dp))
-                                .border(1.dp, if (isLatest) Color.White else Color(0x33FFFFFF), RoundedCornerShape(6.dp))
-                                .background(playerColor.copy(alpha = if (isLatest) 0.35f else 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = "P$playerNum: $rollNumber",
-                                    fontSize = textSize,
-                                    fontWeight = FontWeight.Black,
-                                    color = playerColor
-                                )
+                    Box(
+                        modifier = Modifier
+                            .size(squareSize)
+                            .alpha(if (isLatest) 1f else 0.6f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .border(1.dp, if (isLatest) playerColor else Color(0x33FFFFFF), RoundedCornerShape(6.dp))
+                            .background(playerColor.copy(alpha = if (isLatest) 0.35f else 0.15f))
+                    ) {
+                        // Centered Rolled Number
+                        Text(
+                            text = rollNumber,
+                            fontSize = textSize,
+                            fontWeight = FontWeight.Black,
+                            color = playerColor,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
 
-                                if (hasBridge) {
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text("↑", color = TurboCyan, fontSize = textSize, fontWeight = FontWeight.Black)
-                                } else if (hasOil) {
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text("↓", color = HazardRed, fontSize = textSize, fontWeight = FontWeight.Black)
-                                }
-                            }
+                        // Bottom-right Icon: Refresh circle for 6, or arrows for ramp/oil
+                        if (isSix) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = null,
+                                tint = NitroGreen,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(1.5.dp)
+                                    .size(if (isLatest) 9.dp else 6.5.dp)
+                            )
+                        } else if (hasBridge) {
+                            Text(
+                                text = "↑",
+                                color = TurboCyan,
+                                fontSize = if (isLatest) 8.sp else 5.5.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(1.dp)
+                            )
+                        } else if (hasOil) {
+                            Text(
+                                text = "↓",
+                                color = HazardRed,
+                                fontSize = if (isLatest) 8.sp else 5.5.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(1.dp)
+                            )
                         }
                     }
                 }
