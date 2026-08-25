@@ -72,11 +72,11 @@ object TurboCircuitPack {
             Pair(748f, 765f),  // 6
             Pair(858f, 760f),  // 7 (Bridge 1 launchpad: 7 -> 29)
             // Outer right column:
-            Pair(886f, 626f),  // 8
-            Pair(900f, 518f),  // 9
-            Pair(908f, 410f),  // 10
-            Pair(898f, 306f),  // 11 (Bridge 3 launchpad: 11 -> 31)
-            Pair(865f, 145f),  // 12 (Oil Spill 1 landing from 33)
+            Pair(880f, 638f),  // 8
+            Pair(896f, 532f),  // 9 (Centered inside slot)
+            Pair(898f, 414f),  // 10
+            Pair(888f, 310f),  // 11 (Bridge 3 launchpad: 11 -> 31)
+            Pair(856f, 156f),  // 12 (Oil Spill 1 landing from 33)
             // Outer top row:
             Pair(744f, 86f),   // 13
             Pair(636f, 86f),   // 14 (Bridge 4 launchpad: 14 -> 35)
@@ -86,10 +86,10 @@ object TurboCircuitPack {
             Pair(198f, 108f),  // 18 (Bridge 5 launchpad: 18 -> 37)
             // Outer left column:
             Pair(126f, 186f),  // 19
-            Pair(48f, 266f),   // 20
-            Pair(52f, 370f),   // 21
-            Pair(64f, 490f),   // 22 (Oil Spill 2 landing from 41)
-            Pair(72f, 574f),   // 23
+            Pair(54f, 270f),   // 20
+            Pair(54f, 374f),   // 21
+            Pair(66f, 490f),   // 22 (Oil Spill 2 landing from 41)
+            Pair(74f, 578f),   // 23
             Pair(176f, 604f),  // 24
             // Middle loop:
             Pair(284f, 608f),  // 25 (Oil Spill 3 launchpad: 25 -> 4)
@@ -103,12 +103,12 @@ object TurboCircuitPack {
             Pair(724f, 222f),  // 33 (Oil Spill 1 launchpad: 33 -> 12)
             Pair(618f, 222f),  // 34
             Pair(508f, 222f),  // 35 (Bridge 4 landing from 14)
-            Pair(398f, 222f),  // 36
-            Pair(298f, 238f),  // 37 (Bridge 5 landing from 18)
-            Pair(194f, 244f),  // 38
-            Pair(136f, 310f),  // 39
-            Pair(148f, 416f),  // 40
-            Pair(220f, 490f),  // 41 (Oil Spill 2 launchpad: 41 -> 22)
+            Pair(406f, 220f),  // 36
+            Pair(310f, 230f),  // 37 (Centered inside slot - shifted right and up)
+            Pair(196f, 240f),  // 38
+            Pair(138f, 314f),  // 39
+            Pair(150f, 416f),  // 40
+            Pair(220f, 492f),  // 41 (Oil Spill 2 launchpad: 41 -> 22)
             Pair(328f, 508f),  // 42
             Pair(430f, 508f),  // 43
             Pair(546f, 498f),  // 44
