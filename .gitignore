@@ -30,4 +30,5 @@ debug.keystore
 
 # Local Toolchains
 tools/
+*.zip
 
