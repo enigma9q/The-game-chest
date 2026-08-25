@@ -167,8 +167,8 @@ class GameEngine(
             }
         }
 
-        // Apply Ramps & Hazards unless turn was lost
-        if (!turnLost) {
+        // Apply Ramps & Hazards unless turn was lost (inactive in 1d60 direct target mutator)
+        if (!turnLost && !isNitroTarget && !isNitroAssist) {
             val connection = s.pack.tableLayout.connections.find { it.fromTileId == nextTileId }
             if (connection != null) {
                 if (isReverseHazard) {

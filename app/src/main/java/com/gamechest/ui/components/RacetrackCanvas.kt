@@ -108,36 +108,47 @@ fun RacetrackCanvas(
                 val startTile = layout.tiles.find { it.id == fromTileId } ?: layout.tiles.first()
                 points.add(TrackPoint(startTile.x, startTile.y))
 
-                // Check if this move was a Bridge/Ramp or Oil Spill shortcut/hazard:
-                // - A Bridge/Ramp moves the player FORWARD by a large offset (+18..+22) to a higher tile ID
-                val bridgeConnection = layout.connections.find { conn ->
-                    conn.type == ConnectionType.TURBO_RAMP &&
-                    conn.toTileId == targetTileId &&
-                    conn.fromTileId >= fromTileId &&
-                    (targetTileId - fromTileId > 6 || isNitroMutator)
+                // In 1d60 Nitro Mutator: involuntary oil spills and bridges are inactive.
+                // If moving to a smaller number, cars turn in place and drive backward (or use a 2-way bridge).
+                val triggerConnection = if (isNitroMutator) {
+                    // Only use bridge if directly connected as a 2-way street
+                    layout.connections.find { conn ->
+                        conn.type == ConnectionType.TURBO_RAMP &&
+                        ((conn.fromTileId == fromTileId && conn.toTileId == targetTileId) ||
+                         (conn.toTileId == fromTileId && conn.fromTileId == targetTileId))
+                    }
+                } else {
+                    val bridgeConn = layout.connections.find { conn ->
+                        conn.type == ConnectionType.TURBO_RAMP &&
+                        conn.toTileId == targetTileId &&
+                        conn.fromTileId >= fromTileId &&
+                        targetTileId - fromTileId > 6
+                    }
+                    val oilConn = layout.connections.find { conn ->
+                        conn.type == ConnectionType.OIL_SLICK &&
+                        conn.toTileId == targetTileId &&
+                        conn.fromTileId >= fromTileId &&
+                        targetTileId < fromTileId
+                    }
+                    bridgeConn ?: oilConn
                 }
-
-                // - An Oil Spill drops the player BACKWARD to a lower tile ID (4, 5, 12, 22) only when entering from (25, 26, 33, 41)
-                val oilConnection = layout.connections.find { conn ->
-                    conn.type == ConnectionType.OIL_SLICK &&
-                    conn.toTileId == targetTileId &&
-                    conn.fromTileId >= fromTileId &&
-                    targetTileId < fromTileId // Drops backward!
-                }
-
-                val triggerConnection = bridgeConnection ?: oilConnection
 
                 val finishId = layout.finishTileId
-                // Check if player bounced off finish line
-                val isBounceBack = fromTileId < finishId && targetTileId < finishId && (fromTileId + (finishId - targetTileId) >= finishId) && triggerConnection == null
+                // Bounce off finish line only applies in Classic mode (not 1d60 direct target)
+                val isBounceBack = !isNitroMutator && fromTileId < finishId && targetTileId < finishId && (fromTileId + (finishId - targetTileId) >= finishId) && triggerConnection == null
 
-                if (triggerConnection != null) {
-                    // Step A: Drive along road to connection entrance node
+                if (isNitroMutator && triggerConnection != null) {
+                    // Direct 2-way bridge crossing in 1d60 mode
+                    val destTile = layout.tiles.find { it.id == targetTileId }
+                    if (destTile != null) {
+                        points.add(TrackPoint(destTile.x, destTile.y, isJump = true))
+                    }
+                } else if (triggerConnection != null) {
+                    // Classic mode: Step to bridge/hazard entrance, then launch or spin
                     for (id in (fromTileId + 1)..triggerConnection.fromTileId) {
                         val t = layout.tiles.find { it.id == id }
                         if (t != null) points.add(TrackPoint(t.x, t.y))
                     }
-                    // Step B: Bridge jump or Oil spin to destination node
                     val destTile = layout.tiles.find { it.id == triggerConnection.toTileId }
                     if (destTile != null) {
                         if (triggerConnection.type == ConnectionType.TURBO_RAMP) {
@@ -158,7 +169,7 @@ fun RacetrackCanvas(
                         if (t != null) points.add(TrackPoint(t.x, t.y))
                     }
                 } else {
-                    // Standard step-by-step road traversal (e.g. landing on 4, 5, 22 stays on 4, 5, 22)
+                    // Direct road traversal (forward or in-place turn backward)
                     val stepIds = if (fromTileId < targetTileId) {
                         (fromTileId + 1..targetTileId).toList()
                     } else {
