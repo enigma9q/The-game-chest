@@ -334,7 +334,7 @@ fun LobbyScreen(
                 containerColor = SurfaceDarkCard,
                 title = {
                     Text(
-                        text = "Choose Color for ${player.name}",
+                        text = "Choose Vehicle for ${player.name}",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -343,37 +343,56 @@ fun LobbyScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "Select from available racer colors:",
+                            text = "Select from available vehicles:",
                             fontSize = 13.sp,
                             color = TextSecondary
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            availableAvatars.forEach { avatar ->
-                                val color = parseHexColor(avatar.colorHex)
-                                val isCurrent = player.carAvatar == avatar
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(color)
-                                        .border(
-                                            width = if (isCurrent) 3.dp else 1.dp,
-                                            color = if (isCurrent) Color.White else Color.Transparent,
-                                            shape = CircleShape
-                                        )
-                                        .clickable {
-                                            players = players.toMutableList().also {
-                                                it[pIdx] = player.copy(carAvatar = avatar)
-                                            }
-                                            showColorDialogForPlayerIndex = null
-                                        },
-                                    contentAlignment = Alignment.Center
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            availableAvatars.chunked(2).forEach { rowAvatars ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    if (isCurrent) {
-                                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    rowAvatars.forEach { avatar ->
+                                        val color = parseHexColor(avatar.colorHex)
+                                        val isCurrent = player.carAvatar == avatar
+                                        Button(
+                                            onClick = {
+                                                players = players.toMutableList().also {
+                                                    it[pIdx] = player.copy(carAvatar = avatar)
+                                                }
+                                                showColorDialogForPlayerIndex = null
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isCurrent) SurfaceDark else DarkBackground,
+                                                contentColor = TextPrimary
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                width = if (isCurrent) 2.dp else 1.dp,
+                                                color = if (isCurrent) color else BorderDark
+                                            ),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .clip(CircleShape)
+                                                        .background(color)
+                                                )
+                                                Text(
+                                                    text = avatar.displayName,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }

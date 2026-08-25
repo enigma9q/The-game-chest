@@ -9,8 +9,8 @@ enum class CarAvatar(val displayName: String, val colorHex: String, val assetNam
     CYBER_YELLOW("Gold Classic", "#F59E0B", "car_yellow"),
     NITRO_GREEN("Green Muscle", "#10B981", "car_green"),
     APEX_PURPLE("Police 911", "#6366F1", "car_purple"),
-    MAGMA_ORANGE("Big Wheel", "#F97316", "car_orange"),
-    NEON_CYAN("Excavator", "#06B6D4", "car_cyan"),
+    MAGMA_ORANGE("Velocity GT", "#F97316", "car_orange"),
+    NEON_CYAN("Trash Truck", "#06B6D4", "car_cyan"),
     HOT_PINK("Fire Truck", "#EC4899", "car_pink")
 }
 
