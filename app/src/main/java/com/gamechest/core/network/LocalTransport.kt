@@ -1,5 +1,6 @@
 package com.gamechest.core.network
 
+import com.gamechest.core.model.CarAvatar
 import com.gamechest.core.model.PlayerProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -20,9 +21,19 @@ class LocalTransport : GameTransport {
     private val _receivedPackets = MutableSharedFlow<NetworkPacket>(extraBufferCapacity = 64)
     override val receivedPackets: Flow<NetworkPacket> = _receivedPackets.asSharedFlow()
 
+    private val _localIpAddress = MutableStateFlow<String?>("127.0.0.1")
+    override val localIpAddress: StateFlow<String?> = _localIpAddress.asStateFlow()
+
     override suspend fun startHosting(port: Int, hostProfile: PlayerProfile): Result<Unit> {
         _connectedPeers.value = listOf(
-            NetworkPeer(peerId = hostProfile.id, displayName = hostProfile.name, isHost = true, ipAddress = "127.0.0.1")
+            NetworkPeer(
+                peerId = hostProfile.id,
+                displayName = hostProfile.name,
+                isHost = true,
+                ipAddress = "127.0.0.1",
+                profile = hostProfile,
+                isReady = true
+            )
         )
         _isConnected.value = true
         return Result.success(Unit)
@@ -35,6 +46,18 @@ class LocalTransport : GameTransport {
     override suspend fun sendPacket(packet: NetworkPacket): Result<Unit> {
         _receivedPackets.emit(packet)
         return Result.success(Unit)
+    }
+
+    override suspend fun toggleReady(peerId: String, isReady: Boolean) {
+        _connectedPeers.value = _connectedPeers.value.map {
+            if (it.peerId == peerId) it.copy(isReady = isReady) else it
+        }
+    }
+
+    override suspend fun selectVehicle(peerId: String, avatar: CarAvatar) {
+        _connectedPeers.value = _connectedPeers.value.map {
+            if (it.peerId == peerId) it.copy(profile = it.profile?.copy(carAvatar = avatar)) else it
+        }
     }
 
     override suspend fun disconnect() {

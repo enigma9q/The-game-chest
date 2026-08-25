@@ -1,5 +1,6 @@
 package com.gamechest.core.network
 
+import com.gamechest.core.model.CarAvatar
 import com.gamechest.core.model.PlayerProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -8,10 +9,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Modular transport adapter placeholder for Bluetooth RFCOMM / Nearby Connections.
- * Plugs directly into GameTransport without requiring any changes to GameEngine or UI.
- */
 class BluetoothTransportPlaceholder : GameTransport {
     override val mode: TransportMode = TransportMode.BLUETOOTH
 
@@ -24,17 +21,24 @@ class BluetoothTransportPlaceholder : GameTransport {
     private val _receivedPackets = MutableSharedFlow<NetworkPacket>(extraBufferCapacity = 64)
     override val receivedPackets: Flow<NetworkPacket> = _receivedPackets.asSharedFlow()
 
+    private val _localIpAddress = MutableStateFlow<String?>(null)
+    override val localIpAddress: StateFlow<String?> = _localIpAddress.asStateFlow()
+
     override suspend fun startHosting(port: Int, hostProfile: PlayerProfile): Result<Unit> {
-        // Ready for BluetoothAdapter.listenUsingRfcommWithServiceRecord(...)
         _connectedPeers.value = listOf(
-            NetworkPeer(peerId = hostProfile.id, displayName = "${hostProfile.name} (BT Host)", isHost = true)
+            NetworkPeer(
+                peerId = hostProfile.id,
+                displayName = "${hostProfile.name} (BT Host)",
+                isHost = true,
+                profile = hostProfile,
+                isReady = true
+            )
         )
         _isConnected.value = true
         return Result.success(Unit)
     }
 
     override suspend fun joinHost(hostAddress: String, port: Int, clientProfile: PlayerProfile): Result<Unit> {
-        // Ready for BluetoothDevice.createRfcommSocketToServiceRecord(...)
         _isConnected.value = true
         return Result.success(Unit)
     }
@@ -42,6 +46,18 @@ class BluetoothTransportPlaceholder : GameTransport {
     override suspend fun sendPacket(packet: NetworkPacket): Result<Unit> {
         _receivedPackets.emit(packet)
         return Result.success(Unit)
+    }
+
+    override suspend fun toggleReady(peerId: String, isReady: Boolean) {
+        _connectedPeers.value = _connectedPeers.value.map {
+            if (it.peerId == peerId) it.copy(isReady = isReady) else it
+        }
+    }
+
+    override suspend fun selectVehicle(peerId: String, avatar: CarAvatar) {
+        _connectedPeers.value = _connectedPeers.value.map {
+            if (it.peerId == peerId) it.copy(profile = it.profile?.copy(carAvatar = avatar)) else it
+        }
     }
 
     override suspend fun disconnect() {

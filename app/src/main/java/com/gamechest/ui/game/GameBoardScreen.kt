@@ -233,6 +233,60 @@ fun GameBoardScreen(
                 }
             }
 
+            // ==================== IT IS YOUR TURN TO PLAY! BLUE BANNER ====================
+            AnimatedVisibility(
+                visible = state.turnPhase == TurnPhase.WAITING_FOR_ROLL && state.winnerPlayerId == null && !isRollingAnimation && !showRollAgainBanner,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(tween(200)),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(tween(200)),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 12.dp)
+            ) {
+                Card(
+                    modifier = Modifier
+                        .border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(16.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xF01E3A8A)),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2563EB)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Casino,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "It is your turn to play!",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = 0.5.sp
+                            )
+                            Text(
+                                text = "Roll the dice.",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF93C5FD)
+                            )
+                        }
+                    }
+                }
+            }
+
             // ==================== ROLL AGAIN! 1.5s ANIMATED BANNER ====================
             AnimatedVisibility(
                 visible = showRollAgainBanner,
@@ -253,14 +307,14 @@ fun GameBoardScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                Icons.Default.Bolt,
+                                Icons.Default.Replay,
                                 contentDescription = null,
                                 tint = NitroGreen,
                                 modifier = Modifier.size(30.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "ROLL AGAIN!",
+                                text = "Roll again!",
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Black,
                                 color = NitroGreen,
@@ -269,8 +323,8 @@ fun GameBoardScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = state.extraRollReason ?: "Bonus roll awarded!",
-                            fontSize = 13.sp,
+                            text = state.extraRollReason ?: "Space occupied by other player",
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
                             textAlign = TextAlign.Center

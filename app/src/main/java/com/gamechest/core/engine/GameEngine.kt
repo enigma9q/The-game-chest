@@ -236,8 +236,8 @@ class GameEngine(
                 val otherPlayerOnTile = s.players.find { it.profile.id != playerId && it.currentTileId == nextTileId }
                 if (otherPlayerOnTile != null) {
                     extraRollAwarded = true
-                    extraRollReason = "Drafted behind ${otherPlayerOnTile.profile.name} on tile $nextTileId!"
-                    logs.add(0, GameLogEntry(UUID.randomUUID().toString(), System.currentTimeMillis(), playerId, currentPlayer.profile.name, "🏎️ Drafted behind ${otherPlayerOnTile.profile.name}! Extra roll awarded!", "bolt"))
+                    extraRollReason = if (isNitroTarget) "Space occupied by other player" else "Drafted behind ${otherPlayerOnTile.profile.name} on tile $nextTileId!"
+                    logs.add(0, GameLogEntry(UUID.randomUUID().toString(), System.currentTimeMillis(), playerId, currentPlayer.profile.name, "🏎️ $extraRollReason! Roll again!", "replay"))
                     _events.value = GameEvent.ExtraRollGranted(playerId, extraRollReason!!)
                 }
             }
