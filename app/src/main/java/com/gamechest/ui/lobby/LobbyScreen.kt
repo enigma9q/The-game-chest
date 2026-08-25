@@ -349,9 +349,9 @@ fun LobbyScreen(
                             .fillMaxHeight()
                     ) {
                         MutatorSelector(
-                            gamePack = gamePack,
-                            selectedMutatorIds = selectedMutators,
-                            onToggleMutator = { id ->
+                            availableMutators = gamePack.manifest.availableMutators,
+                            selectedMutators = selectedMutators,
+                            onMutatorToggled = { id ->
                                 selectedMutators = if (selectedMutators.contains(id)) {
                                     if (selectedMutators.size > 1) selectedMutators - id else selectedMutators
                                 } else {
@@ -480,9 +480,9 @@ fun LobbyScreen(
 
                     item {
                         MutatorSelector(
-                            gamePack = gamePack,
-                            selectedMutatorIds = selectedMutators,
-                            onToggleMutator = { id ->
+                            availableMutators = gamePack.manifest.availableMutators,
+                            selectedMutators = selectedMutators,
+                            onMutatorToggled = { id ->
                                 selectedMutators = if (selectedMutators.contains(id)) {
                                     if (selectedMutators.size > 1) selectedMutators - id else selectedMutators
                                 } else {
@@ -585,7 +585,7 @@ fun LobbyScreen(
         showDiceDialogForPlayerIndex?.let { pIdx ->
             val player = players.getOrNull(pIdx)
             if (player != null) {
-                var selectedSides by remember { mutableStateOf(player.customDiceSpec.sides) }
+                var selectedSides by remember { mutableStateOf(player.customDiceSpec?.sides ?: 6) }
                 AlertDialog(
                     onDismissRequest = { showDiceDialogForPlayerIndex = null },
                     containerColor = SurfaceDarkCard,
@@ -981,7 +981,7 @@ private fun RacerCard(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     modifier = Modifier.height(32.dp)
                 ) {
-                    Text("d${player.customDiceSpec.sides}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("d${player.customDiceSpec?.sides ?: 6}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
