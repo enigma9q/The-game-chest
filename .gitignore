@@ -1,6 +1,7 @@
 *.iml
 .gradle
 /local.properties
+local.properties
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
@@ -13,4 +14,15 @@
 /captures
 .externalNativeBuild
 .cxx
-local.properties
+
+# Security signatures & Keystores (DO NOT UPLOAD)
+*.jks
+*.keystore
+*.key
+*.p12
+*.pem
+*.pk8
+*signing*
+*keystore*
+release-key.*
+debug.keystore
