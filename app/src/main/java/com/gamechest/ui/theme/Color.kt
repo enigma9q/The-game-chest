@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 val DarkBackground = Color(0xFF0F172A)
 val SurfaceDark = Color(0xFF1E293B)
 val SurfaceDarkCard = Color(0xFF334155)
+val BorderDark = Color(0xFF334155)
 
 val PrimaryNeon = Color(0xFF38BDF8)
 val SecondaryOrange = Color(0xFFF97316)

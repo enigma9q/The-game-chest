@@ -1,8 +1,5 @@
 package com.gamechest.ui.game
 
-import android.app.Activity
-import android.content.Context
-import android.content.pm.ActivityInfo
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
@@ -30,7 +27,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -45,30 +41,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
+import com.gamechest.ui.platform.PreferenceStore
+import com.gamechest.ui.theme.parseHexColor
+
 @Composable
 fun GameBoardScreen(
     engine: GameEngine,
     onExitGame: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val state by engine.state.collectAsState()
     val scope = rememberCoroutineScope()
 
-    // 1. Lock Screen Orientation to Landscape
-    DisposableEffect(Unit) {
-        val activity = context as? Activity
-        val prevOrientation = activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        onDispose {
-            activity?.requestedOrientation = prevOrientation
-        }
-    }
-
-    // 2. Persistent Quick Play Setting
-    val prefs = remember { context.getSharedPreferences("game_chest_prefs", Context.MODE_PRIVATE) }
+    // 2. Persistent Quick Play Setting via Multiplatform PreferenceStore
     var isQuickPlayEnabled by remember {
-        mutableStateOf(prefs.getBoolean("quick_play_enabled", false))
+        mutableStateOf(PreferenceStore.getBoolean("quick_play_enabled", false))
     }
 
     var quickPlayToastText by remember { mutableStateOf<String?>(null) }
@@ -185,7 +172,7 @@ fun GameBoardScreen(
                         onToggleQuickPlay = {
                             val newValue = !isQuickPlayEnabled
                             isQuickPlayEnabled = newValue
-                            prefs.edit().putBoolean("quick_play_enabled", newValue).apply()
+                            PreferenceStore.setBoolean("quick_play_enabled", newValue)
                             quickPlayToastText = if (newValue) "⚡ QUICK PLAY ACTIVATED" else "⚡ QUICK PLAY DEACTIVATED"
                             scope.launch {
                                 delay(1500)
@@ -410,7 +397,7 @@ private fun LeftPlayersSidebar(
             ) {
                 state.players.forEachIndexed { idx, player ->
                     val isCurrentTurn = idx == state.currentTurnPlayerIndex
-                    val carColor = Color(android.graphics.Color.parseColor(player.profile.carAvatar.colorHex))
+                    val carColor = parseHexColor(player.profile.carAvatar.colorHex)
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -546,7 +533,7 @@ private fun RightDiceArea(
             ) {
                 if (winner != null) {
                     // Winner Display in Dice Area
-                    val winnerColor = Color(android.graphics.Color.parseColor(winner.profile.carAvatar.colorHex))
+                    val winnerColor = parseHexColor(winner.profile.carAvatar.colorHex)
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -652,7 +639,7 @@ private fun RollsHistorySidebar(
                     val isLatest = idx == 0
                     val player = state.players.find { it.profile.id == log.playerId }
                     val playerColor = player?.let {
-                        Color(android.graphics.Color.parseColor(it.profile.carAvatar.colorHex))
+                        parseHexColor(it.profile.carAvatar.colorHex)
                     } ?: PrimaryNeon
 
                     val rollNumber = log.message.substringAfter("rolled ").substringBefore(" on").trim()

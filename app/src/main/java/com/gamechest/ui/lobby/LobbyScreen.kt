@@ -1,6 +1,5 @@
 package com.gamechest.ui.lobby
 
-import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,8 +31,8 @@ fun LobbyScreen(
     onBrowsePacks: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val isLandscape = maxWidth > maxHeight || maxWidth > 650.dp
 
     var transportMode by remember { mutableStateOf(TransportMode.SAME_DEVICE_LOCAL) }
     var selectedMutators by remember {
@@ -354,7 +352,7 @@ fun LobbyScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             availableAvatars.forEach { avatar ->
-                                val color = Color(android.graphics.Color.parseColor(avatar.colorHex))
+                                val color = parseHexColor(avatar.colorHex)
                                 val isCurrent = player.carAvatar == avatar
                                 Box(
                                     modifier = Modifier
@@ -464,6 +462,7 @@ fun LobbyScreen(
         }
     }
 }
+}
 
 @Composable
 private fun MultiplayerModeRow(
@@ -560,7 +559,7 @@ private fun RacerCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(Color(android.graphics.Color.parseColor(player.carAvatar.colorHex)))
+                    .background(parseHexColor(player.carAvatar.colorHex))
                     .border(2.dp, Color.White, CircleShape)
                     .clickable { onColorClick() },
                 contentAlignment = Alignment.Center

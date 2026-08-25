@@ -24,5 +24,8 @@ local.properties
 *.pk8
 *signing*
 *keystore*
-release-key.*
 debug.keystore
+
+# Local Toolchains
+tools/
+

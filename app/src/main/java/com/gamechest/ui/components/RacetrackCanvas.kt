@@ -1,7 +1,5 @@
 package com.gamechest.ui.components
 
-import android.graphics.Paint
-import android.graphics.Typeface
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -13,15 +11,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.*
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.res.imageResource
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.text.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.gamechest.R
+import androidx.compose.ui.unit.sp
 import com.gamechest.core.model.*
 import com.gamechest.ui.theme.*
 import kotlinx.coroutines.launch
@@ -35,158 +33,84 @@ fun RacetrackCanvas(
     onTileClicked: (TileNode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isReverseHazards = activeMutators.contains(MutatorId.REVERSE_HAZARD_OVERDRIVE)
-
-    // Dynamically load board artwork and token sprites based on the active pack
+    // Dynamically load board artwork and token sprites via AssetProvider
     val isSheepGame = layout.backgroundImageAsset?.contains("sheep") == true
-    val boardBitmap = ImageBitmap.imageResource(
-        id = if (isSheepGame) R.drawable.save_the_sheep_board else R.drawable.rev_up_racers_board
-    )
+    val assetProvider = LocalAssetProvider.current
+    val boardPainter = assetProvider.getBoardPainter(isSheepGame)
 
-    // Load colorized game piece token sprites (Sheep or Sports Cars)
-    val tokenBitmaps = if (isSheepGame) {
-        mapOf(
-            CarAvatar.SPEEDSTER_RED to ImageBitmap.imageResource(R.drawable.sheep_token_red),
-            CarAvatar.TURBO_BLUE to ImageBitmap.imageResource(R.drawable.sheep_token_blue),
-            CarAvatar.CYBER_YELLOW to ImageBitmap.imageResource(R.drawable.sheep_token_yellow),
-            CarAvatar.NITRO_GREEN to ImageBitmap.imageResource(R.drawable.sheep_token_green),
-            CarAvatar.APEX_PURPLE to ImageBitmap.imageResource(R.drawable.sheep_token_purple),
-            CarAvatar.MAGMA_ORANGE to ImageBitmap.imageResource(R.drawable.sheep_token_orange),
-            CarAvatar.NEON_CYAN to ImageBitmap.imageResource(R.drawable.sheep_token_cyan),
-            CarAvatar.HOT_PINK to ImageBitmap.imageResource(R.drawable.sheep_token_pink)
-        )
-    } else {
-        mapOf(
-            CarAvatar.SPEEDSTER_RED to ImageBitmap.imageResource(R.drawable.car_token_red),
-            CarAvatar.TURBO_BLUE to ImageBitmap.imageResource(R.drawable.car_token_blue),
-            CarAvatar.CYBER_YELLOW to ImageBitmap.imageResource(R.drawable.car_token_yellow),
-            CarAvatar.NITRO_GREEN to ImageBitmap.imageResource(R.drawable.car_token_green),
-            CarAvatar.APEX_PURPLE to ImageBitmap.imageResource(R.drawable.car_token_purple),
-            CarAvatar.MAGMA_ORANGE to ImageBitmap.imageResource(R.drawable.car_token_orange),
-            CarAvatar.NEON_CYAN to ImageBitmap.imageResource(R.drawable.car_token_cyan),
-            CarAvatar.HOT_PINK to ImageBitmap.imageResource(R.drawable.car_token_pink)
-        )
+    val tokenPainters = CarAvatar.entries.associateWith {
+        assetProvider.getTokenPainter(it, isSheepGame)
     }
 
-    // Text paint with shadow for transparent background numbers
-    val textPaint = remember {
-        Paint().apply {
-            color = android.graphics.Color.WHITE
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            isAntiAlias = true
-            setShadowLayer(4f, 0f, 1.5f, android.graphics.Color.BLACK)
-        }
-    }
-
-    val playerBadgeTextPaint = remember {
-        Paint().apply {
-            color = android.graphics.Color.WHITE
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            isAntiAlias = true
-        }
-    }
+    val textMeasurer = rememberTextMeasurer()
 
     // Driving Car Animated State for Each Player
-    val playerCarStates = remember { mutableStateMapOf<String, AnimatedCarDriver>() }
+    val scope = rememberCoroutineScope()
+    class PlayerCarAnim(
+        val animX: Animatable<Float, AnimationVector1D>,
+        val animY: Animatable<Float, AnimationVector1D>,
+        val animAngle: Animatable<Float, AnimationVector1D>
+    )
 
-    // Synchronize driving animation when player tile positions update
+    val playerCarStates = remember { mutableStateMapOf<String, PlayerCarAnim>() }
+
+    // Initialize/sync car animation states
     players.forEach { player ->
-        val targetTile = layout.tiles.find { it.id == player.currentTileId } ?: layout.tiles.first()
-        val tile1 = layout.tiles.find { it.id == 1 }
-        val tile0 = layout.tiles.find { it.id == 0 }
-
-        // At START (Tile 0), calculate race start heading pointing towards Tile 1
-        val initialStartAngle = if (tile0 != null && tile1 != null) {
-            val rad = atan2((tile1.y - tile0.y).toDouble(), (tile1.x - tile0.x).toDouble())
-            (Math.toDegrees(rad).toFloat() + 90f)
-        } else 103f
-
-        val carDriver = playerCarStates.getOrPut(player.profile.id) {
-            AnimatedCarDriver(
-                initialX = targetTile.x,
-                initialY = targetTile.y,
-                initialAngle = if (player.currentTileId == 0) initialStartAngle else 0f,
-                lastTileId = player.currentTileId
+        if (!playerCarStates.containsKey(player.profile.id)) {
+            val startTile = layout.tiles.find { it.id == player.currentTileId } ?: layout.tiles.first()
+            playerCarStates[player.profile.id] = PlayerCarAnim(
+                animX = Animatable(startTile.x),
+                animY = Animatable(startTile.y),
+                animAngle = Animatable(0f)
             )
         }
+    }
 
-        LaunchedEffect(player.currentTileId) {
-            if (carDriver.lastTileId != player.currentTileId) {
-                val startId = carDriver.lastTileId
-                val endId = player.currentTileId
-                carDriver.lastTileId = endId
+    // Trigger smooth fluid driving animations when player moves
+    players.forEach { player ->
+        val carState = playerCarStates[player.profile.id]
+        if (carState != null) {
+            val targetTile = layout.tiles.find { it.id == player.currentTileId } ?: layout.tiles.first()
+            val currX = carState.animX.value
+            val currY = carState.animY.value
 
-                // Determine route waypoints (step-by-step or direct bridge/oil connection)
-                val waypoints = calculateWaypoints(startId, endId, layout)
+            if (currX != targetTile.x || currY != targetTile.y) {
+                LaunchedEffect(player.currentTileId) {
+                    val dx = targetTile.x - currX
+                    val dy = targetTile.y - currY
+                    val targetAngle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
 
-                var prevTile = layout.tiles.find { it.id == startId } ?: layout.tiles.first()
+                    // 1. Fluid steer turn towards target
+                    carState.animAngle.animateTo(
+                        targetValue = targetAngle,
+                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+                    )
 
-                // Drive car fluidly along the track path
-                for (nextTile in waypoints) {
-                    val targetX = nextTile.x
-                    val targetY = nextTile.y
-                    val currentX = carDriver.animX.value
-                    val currentY = carDriver.animY.value
-
-                    val dx = targetX - currentX
-                    val dy = targetY - currentY
-
-                    if (dx * dx + dy * dy > 0.000005f) {
-                        val isConnectionMove = layout.connections.any { 
-                            it.fromTileId == prevTile.id && it.toTileId == nextTile.id 
-                        }
-
-                        // Calculate heading angle in degrees (car sprite top is 0 deg -> +90 deg offset)
-                        val rad = atan2(dy.toDouble(), dx.toDouble())
-                        var deg = Math.toDegrees(rad).toFloat() + 90f
-                        val curAngle = carDriver.animAngle.value
-                        var diff = (deg - curAngle) % 360f
-                        if (diff > 180f) diff -= 360f
-                        if (diff < -180f) diff += 360f
-                        val targetHeading = curAngle + diff
-
-                        val rotateDuration = if (isConnectionMove) 140 else 90
-                        val driveDuration = if (isConnectionMove) 280 else 130
-
-                        // Rotate car to face the bridge/oil track or road heading
-                        launch {
-                            carDriver.animAngle.animateTo(
-                                targetHeading,
-                                animationSpec = tween(durationMillis = rotateDuration, easing = FastOutSlowInEasing)
-                            )
-                        }
-
-                        // Drive car smoothly to the next position
-                        carDriver.animX.animateTo(
-                            targetX,
-                            animationSpec = tween(durationMillis = driveDuration, easing = if (isConnectionMove) FastOutSlowInEasing else LinearEasing)
+                    // 2. Drive smoothly along path to destination
+                    launch {
+                        carState.animX.animateTo(
+                            targetValue = targetTile.x,
+                            animationSpec = tween(durationMillis = 350, easing = LinearOutSlowInEasing)
                         )
-                        carDriver.animY.animateTo(
-                            targetY,
-                            animationSpec = tween(durationMillis = driveDuration, easing = if (isConnectionMove) FastOutSlowInEasing else LinearEasing)
-                        )
-
-                        // If completed a bridge/oil connection, smoothly orient towards the next road node
-                        if (isConnectionMove) {
-                            val nextRoadTile = layout.tiles.find { it.id == nextTile.id + 1 }
-                            if (nextRoadTile != null) {
-                                val roadDx = nextRoadTile.x - nextTile.x
-                                val roadDy = nextRoadTile.y - nextTile.y
-                                val roadRad = atan2(roadDy.toDouble(), roadDx.toDouble())
-                                val roadDeg = Math.toDegrees(roadRad).toFloat() + 90f
-                                var roadDiff = (roadDeg - carDriver.animAngle.value) % 360f
-                                if (roadDiff > 180f) roadDiff -= 360f
-                                if (roadDiff < -180f) roadDiff += 360f
-                                carDriver.animAngle.animateTo(
-                                    carDriver.animAngle.value + roadDiff,
-                                    animationSpec = tween(durationMillis = 110, easing = FastOutSlowInEasing)
-                                )
-                            }
-                        }
                     }
-                    prevTile = nextTile
+                    launch {
+                        carState.animY.animateTo(
+                            targetValue = targetTile.y,
+                            animationSpec = tween(durationMillis = 350, easing = LinearOutSlowInEasing)
+                        )
+                    }
+
+                    // 3. Align slightly towards track flow when parked
+                    val nextTile = layout.tiles.getOrNull(targetTile.index + 1)
+                    if (nextTile != null) {
+                        val flowDx = nextTile.x - targetTile.x
+                        val flowDy = nextTile.y - targetTile.y
+                        val flowAngle = (atan2(flowDy.toDouble(), flowDx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
+                        carState.animAngle.animateTo(
+                            targetValue = flowAngle,
+                            animationSpec = tween(durationMillis = 150, easing = LinearEasing)
+                        )
+                    }
                 }
             }
         }
@@ -194,24 +118,27 @@ fun RacetrackCanvas(
 
     Box(
         modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(1024f / 850f)
+            .fillMaxSize()
             .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF0F172A))
-            .border(2.5.dp, Color(0xFF334155), RoundedCornerShape(20.dp))
+            .background(DarkBackground)
+            .border(2.dp, BorderDark, RoundedCornerShape(20.dp))
     ) {
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(layout) {
-                    detectTapGestures { offset ->
-                        val width = size.width
-                        val height = size.height
-                        val clickedTile = layout.tiles.minByOrNull { tile ->
-                            val tx = tile.x * width
-                            val ty = tile.y * height
-                            (tx - offset.x) * (tx - offset.x) + (ty - offset.y) * (ty - offset.y)
+                    detectTapGestures { tapOffset ->
+                        val canvasW = size.width
+                        val canvasH = size.height
+                        val touchRadius = canvasW * 0.045f
+
+                        val clickedTile = layout.tiles.find { tile ->
+                            val tx = tile.x * canvasW
+                            val ty = tile.y * canvasH
+                            val dist = kotlin.math.sqrt((tx - tapOffset.x) * (tx - tapOffset.x) + (ty - tapOffset.y) * (ty - tapOffset.y))
+                            dist <= touchRadius
                         }
+
                         if (clickedTile != null) {
                             onTileClicked(clickedTile)
                         }
@@ -220,65 +147,71 @@ fun RacetrackCanvas(
         ) {
             val canvasW = size.width
             val canvasH = size.height
+            val baseRadius = canvasW * 0.024f
 
-            // 1. Draw High-Resolution Rev-Up Racers Board Image
-            drawImage(
-                image = boardBitmap,
-                dstOffset = IntOffset.Zero,
-                dstSize = IntSize(canvasW.toInt(), canvasH.toInt())
-            )
+            // 1. Draw High-Res Top-Down Board Background Artwork
+            with(boardPainter) {
+                draw(size = Size(canvasW, canvasH))
+            }
 
-            // 2. Draw Tile Node Numbers with TRANSPARENT BACKGROUND, perfectly centered
-            val baseRadius = (canvasW * 0.024f).coerceIn(12f, 24f)
-            textPaint.textSize = baseRadius * 1.05f
-
+            // 2. Draw Track Stepping Tiles (Subtle clean interactive glow on hover/active)
             layout.tiles.forEach { tile ->
                 val tx = tile.x * canvasW
                 val ty = tile.y * canvasH
                 val isStart = tile.type == TileType.START
                 val isFinish = tile.type == TileType.FINISH
-
-                // Draw centered numbers directly over artwork with transparent background
-                drawIntoCanvas { canvas ->
-                    val textBounds = android.graphics.Rect()
-                    when {
-                        isStart -> {
-                            // Start circle already has artwork label; draw clean start badge
-                            textPaint.textSize = baseRadius * 0.70f
-                            textPaint.color = android.graphics.Color.WHITE
-                            val label = "START"
-                            textPaint.getTextBounds(label, 0, label.length, textBounds)
-                            val textY = ty - textBounds.exactCenterY()
-                            canvas.nativeCanvas.drawText(label, tx, textY, textPaint)
-                            textPaint.textSize = baseRadius * 1.05f
-                        }
-                        isFinish -> {
-                            textPaint.textSize = baseRadius * 0.70f
-                            textPaint.color = android.graphics.Color.YELLOW
-                            val label = "FINISH"
-                            textPaint.getTextBounds(label, 0, label.length, textBounds)
-                            val textY = ty - textBounds.exactCenterY()
-                            canvas.nativeCanvas.drawText(label, tx, textY, textPaint)
-                            textPaint.textSize = baseRadius * 1.05f
-                        }
-                        else -> {
-                            val label = "${tile.index}"
-                            textPaint.color = android.graphics.Color.WHITE
-                            textPaint.getTextBounds(label, 0, label.length, textBounds)
-                            val textY = ty - textBounds.exactCenterY()
-                            canvas.nativeCanvas.drawText(label, tx, textY, textPaint)
-                        }
-                    }
+                val radius = when {
+                    isStart || isFinish -> baseRadius * 1.35f
+                    else -> baseRadius * 0.95f
                 }
+
+                val hasPlayers = players.any { it.currentTileId == tile.id }
+                if (hasPlayers) {
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.22f),
+                        radius = radius * 1.35f,
+                        center = Offset(tx, ty)
+                    )
+                }
+
+                // Draw tile label / index using Compose drawText
+                val label = when {
+                    isStart -> "START"
+                    isFinish -> "HOME"
+                    else -> "${tile.index}"
+                }
+
+                val textColor = when {
+                    isStart -> Color(0xFF10B981)
+                    isFinish -> Color(0xFFF59E0B)
+                    else -> Color.White
+                }
+
+                val fontSize = if (isStart || isFinish) (baseRadius * 0.65f).sp else (baseRadius * 0.82f).sp
+
+                val textResult = textMeasurer.measure(
+                    text = AnnotatedString(label),
+                    style = TextStyle(
+                        color = textColor,
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.Black,
+                        shadow = Shadow(color = Color.Black, offset = Offset(1f, 1f), blurRadius = 4f)
+                    )
+                )
+
+                drawText(
+                    textLayoutResult = textResult,
+                    topLeft = Offset(tx - textResult.size.width / 2f, ty - textResult.size.height / 2f)
+                )
             }
 
-            // 5. Draw Fluid Driving Game Piece Tokens (Sheep or Sports Cars)
+            // 3. Draw Fluid Driving Game Piece Tokens (Sheep or Sports Cars)
             val tokenWidth = (baseRadius * 1.55f).toInt()
             val tokenHeight = if (isSheepGame) tokenWidth else (tokenWidth * 2.08f).toInt()
 
             players.forEachIndexed { pIdx, player ->
                 val carDriver = playerCarStates[player.profile.id]
-                val tokenBitmap = tokenBitmaps[player.profile.carAvatar] ?: tokenBitmaps[CarAvatar.SPEEDSTER_RED]!!
+                val tokenPainter = tokenPainters[player.profile.carAvatar] ?: tokenPainters[CarAvatar.SPEEDSTER_RED]!!
 
                 val cx = if (carDriver != null) carDriver.animX.value * canvasW else {
                     val tile = layout.tiles.find { it.id == player.currentTileId } ?: layout.tiles.first()
@@ -290,21 +223,18 @@ fun RacetrackCanvas(
                 }
                 val tokenRotation = carDriver?.animAngle?.value ?: 0f
 
-                // Stagger pieces side-by-side or behind each other when on the same node (Never overlapping/under)
+                // Stagger pieces side-by-side or behind each other when on the same node (Never overlapping)
                 val isMoving = carDriver?.animX?.isRunning == true || carDriver?.animY?.isRunning == true
                 val (drawX, drawY) = if (!isMoving && players.count { it.currentTileId == player.currentTileId } > 1) {
                     val sameTilePlayers = players.filter { it.currentTileId == player.currentTileId }
                     val idxOnTile = sameTilePlayers.indexOf(player)
                     val totalOnTile = sameTilePlayers.size
 
-                    // Compute grid parking offset next to / behind each other
                     val (offsetX, offsetY) = when (totalOnTile) {
                         2 -> {
-                            // Side-by-side: left and right
                             if (idxOnTile == 0) Pair(-tokenWidth * 0.65f, 0f) else Pair(tokenWidth * 0.65f, 0f)
                         }
                         3 -> {
-                            // Front 2 side-by-side, 1 behind
                             when (idxOnTile) {
                                 0 -> Pair(-tokenWidth * 0.65f, -tokenHeight * 0.35f)
                                 1 -> Pair(tokenWidth * 0.65f, -tokenHeight * 0.35f)
@@ -312,7 +242,6 @@ fun RacetrackCanvas(
                             }
                         }
                         else -> {
-                            // 2x2 Grid: 2 in front, 2 behind
                             val row = if (idxOnTile < 2) -1 else 1
                             val col = if (idxOnTile % 2 == 0) -1 else 1
                             Pair(col * tokenWidth * 0.65f, row * tokenHeight * 0.45f)
@@ -332,20 +261,18 @@ fun RacetrackCanvas(
 
                 // Draw Rotated Game Piece Token Sprite
                 withTransform({
-                    translate(drawX, drawY)
-                    rotate(if (isSheepGame) 0f else tokenRotation, pivot = Offset.Zero)
+                    translate(drawX - tokenWidth / 2f, drawY - tokenHeight / 2f)
+                    rotate(if (isSheepGame) 0f else tokenRotation, pivot = Offset(tokenWidth / 2f, tokenHeight / 2f))
                 }) {
-                    drawImage(
-                        image = tokenBitmap,
-                        dstOffset = IntOffset(-tokenWidth / 2, -tokenHeight / 2),
-                        dstSize = IntSize(tokenWidth, tokenHeight)
-                    )
+                    with(tokenPainter) {
+                        draw(size = Size(tokenWidth.toFloat(), tokenHeight.toFloat()))
+                    }
                 }
 
                 // Draw Player Badge Indicator (P1, P2, etc.) Next to Game Piece
                 val badgeRadius = baseRadius * 0.55f
                 val badgeCenter = Offset(drawX + tokenWidth * 0.62f, drawY - tokenHeight * 0.36f)
-                val tokenThemeColor = Color(android.graphics.Color.parseColor(player.profile.carAvatar.colorHex))
+                val tokenThemeColor = parseHexColor(player.profile.carAvatar.colorHex)
 
                 drawCircle(
                     color = tokenThemeColor,
@@ -359,83 +286,22 @@ fun RacetrackCanvas(
                     style = Stroke(width = 2f)
                 )
 
-                drawIntoCanvas { canvas ->
-                    val playerNum = player.profile.name.filter { it.isDigit() }.ifEmpty { "${pIdx + 1}" }
-                    playerBadgeTextPaint.textSize = badgeRadius * 1.25f
-                    val yOff = (playerBadgeTextPaint.descent() + playerBadgeTextPaint.ascent()) / 2f
-                    canvas.nativeCanvas.drawText("P$playerNum", badgeCenter.x, badgeCenter.y - yOff, playerBadgeTextPaint)
-                }
+                val playerNum = player.profile.name.filter { it.isDigit() }.ifEmpty { "${pIdx + 1}" }
+                val badgeTextResult = textMeasurer.measure(
+                    text = AnnotatedString("P$playerNum"),
+                    style = TextStyle(
+                        color = Color.White,
+                        fontSize = (badgeRadius * 0.95f).sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = TextAlign.Center
+                    )
+                )
+
+                drawText(
+                    textLayoutResult = badgeTextResult,
+                    topLeft = Offset(badgeCenter.x - badgeTextResult.size.width / 2f, badgeCenter.y - badgeTextResult.size.height / 2f)
+                )
             }
         }
     }
-}
-
-private class AnimatedCarDriver(
-    initialX: Float,
-    initialY: Float,
-    initialAngle: Float = 0f,
-    var lastTileId: Int = 0
-) {
-    val animX = Animatable(initialX)
-    val animY = Animatable(initialY)
-    val animAngle = Animatable(initialAngle)
-}
-
-/**
- * Computes waypoints along the racetrack for fluid car movement:
- * - If traversing a bridge or oil spill: moves along road to the launchpad, then directly straight through the connection.
- * - Otherwise: moves step-by-step from node to node.
- */
-private fun calculateWaypoints(
-    fromTileId: Int,
-    toTileId: Int,
-    layout: TableLayoutConfig
-): List<TileNode> {
-    if (fromTileId == toTileId) return emptyList()
-
-    // 1. Direct connection
-    val directConnection = layout.connections.find { it.fromTileId == fromTileId && it.toTileId == toTileId }
-    if (directConnection != null) {
-        val targetNode = layout.tiles.find { it.id == toTileId }
-        return if (targetNode != null) listOf(targetNode) else emptyList()
-    }
-
-    // 2. Check if a bridge or oil spill was taken as part of this turn's move:
-    // e.g. rolled from fromTileId (e.g. 4) to conn.fromTileId (e.g. 7), and then took bridge to toTileId (e.g. 29)
-    // or rolled from fromTileId (e.g. 38) to conn.fromTileId (e.g. 41), and then took oil spill to toTileId (e.g. 22)
-    val triggeredConnection = layout.connections.find { conn ->
-        conn.toTileId == toTileId && (
-            (conn.type == ConnectionType.TURBO_RAMP && conn.fromTileId > fromTileId && conn.fromTileId - fromTileId <= 12) ||
-            (conn.type == ConnectionType.OIL_SLICK && conn.fromTileId > fromTileId && conn.fromTileId - fromTileId <= 12)
-        )
-    }
-
-    if (triggeredConnection != null) {
-        val waypoints = mutableListOf<TileNode>()
-        // Step forward from current tile to launchpad
-        for (stepId in (fromTileId + 1)..triggeredConnection.fromTileId) {
-            val node = layout.tiles.find { it.id == stepId }
-            if (node != null) waypoints.add(node)
-        }
-        // Launch directly straight across the bridge / oil spill to destination tile
-        val destNode = layout.tiles.find { it.id == toTileId }
-        if (destNode != null && waypoints.lastOrNull()?.id != toTileId) {
-            waypoints.add(destNode)
-        }
-        return waypoints
-    }
-
-    // 3. Normal step-by-step forward or backward circuit movement
-    val step = if (toTileId > fromTileId) 1 else -1
-    val waypoints = mutableListOf<TileNode>()
-    var curr = fromTileId + step
-    while (true) {
-        val node = layout.tiles.find { it.id == curr }
-        if (node != null) {
-            waypoints.add(node)
-        }
-        if (curr == toTileId) break
-        curr += step
-    }
-    return waypoints
 }
