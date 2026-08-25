@@ -56,7 +56,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "TheGameChest"
-            packageVersion = "1.0.0"
+            packageVersion = "0.0.11"
             description = "The Game Chest - Digital Board Game Hub"
             vendor = "The Game Chest"
             copyright = "© 2026 The Game Chest"
