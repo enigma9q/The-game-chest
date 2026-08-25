@@ -26,10 +26,17 @@ import com.gamechest.core.model.*
 import com.gamechest.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.sign
 
 private sealed class MoveAction {
-    data class DriveStep(val tile: TileNode, val isFirst: Boolean, val isLast: Boolean) : MoveAction()
+    data class DriveStep(
+        val tile: TileNode,
+        val isFirst: Boolean,
+        val isLast: Boolean,
+        val cornerTurnAngle: Float = 0f
+    ) : MoveAction()
     data class BridgeLaunch(val fromTile: TileNode, val toTile: TileNode) : MoveAction()
     data class OilSlide(val fromTile: TileNode, val toTile: TileNode) : MoveAction()
 }
@@ -44,6 +51,10 @@ fun RacetrackCanvas(
 ) {
     // Dynamically load board artwork and token sprites via AssetProvider
     val isSheepGame = layout.backgroundImageAsset?.contains("sheep") == true
+    val isNitroMutator = activeMutators.contains(MutatorId.NITRO_TARGET_OVERDRIVE) ||
+            activeMutators.contains(MutatorId.NITRO_ASSIST_OVERDRIVE)
+    val isReverseHazard = activeMutators.contains(MutatorId.REVERSE_HAZARD_OVERDRIVE)
+
     val assetProvider = LocalAssetProvider.current
     val boardPainter = assetProvider.getBoardPainter(isSheepGame)
 
@@ -76,7 +87,7 @@ fun RacetrackCanvas(
         }
     }
 
-    // Step-by-Step Waypoint Traversal along the track path with Acceleration, Cruising, Deceleration, and Bridge/Oil transitions
+    // Step-by-Step Waypoint Traversal along the track path with Corner Drifts, High Speed Nitro, and Bridge/Oil transitions
     players.forEach { player ->
         val carState = playerCarStates[player.profile.id]
         val fromTileId = lastSettledTileMap[player.profile.id] ?: player.currentTileId
@@ -87,12 +98,7 @@ fun RacetrackCanvas(
                 // 1. Build the path of actions:
                 // Check if targetTileId was reached via a Bridge or Oil Spill connection
                 val triggerConnection = layout.connections.find { conn ->
-                    conn.toTileId == targetTileId &&
-                    if (conn.type == ConnectionType.TURBO_RAMP) {
-                        conn.fromTileId >= fromTileId
-                    } else {
-                        conn.fromTileId >= fromTileId
-                    }
+                    conn.toTileId == targetTileId && conn.fromTileId >= fromTileId
                 }
 
                 val actions = mutableListOf<MoveAction>()
@@ -118,7 +124,10 @@ fun RacetrackCanvas(
                         }
                     }
                 } else {
-                    // Standard step-by-step movement through numbers going up or down
+                    // Check if player overshot finish and bounced back
+                    val finishId = layout.finishTileId
+                    val isBounce = fromTileId + (targetTileId - fromTileId) > finishId && targetTileId < finishId
+
                     val stepIds = if (fromTileId < targetTileId) {
                         (fromTileId + 1..targetTileId).toList()
                     } else {
@@ -133,8 +142,10 @@ fun RacetrackCanvas(
                     }
                 }
 
-                // 2. Animate sequentially through actions with acceleration and deceleration
-                actions.forEach { action ->
+                // 2. Animate sequentially through actions with corner drifting & physics
+                var previousHeading = carState.animAngle.value
+
+                actions.forEachIndexed { actionIdx, action ->
                     when (action) {
                         is MoveAction.DriveStep -> {
                             val targetX = action.tile.x
@@ -144,24 +155,50 @@ fun RacetrackCanvas(
 
                             val dx = targetX - curX
                             val dy = targetY - curY
-                            val targetAngle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
+                            val segmentAngle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
 
-                            // Quick dynamic steering
-                            val steerDuration = if (action.isFirst) 140 else 90
+                            // Calculate corner curvature delta
+                            var angleDiff = (segmentAngle - previousHeading) % 360f
+                            if (angleDiff > 180f) angleDiff -= 360f
+                            if (angleDiff < -180f) angleDiff += 360f
+
+                            val isSharpCorner = abs(angleDiff) > 30f
+
+                            // Corner Drift Angle: Tail slides outward on sharp turns!
+                            val driftOffset = if (isSharpCorner && !isSheepGame) {
+                                val intensity = if (isNitroMutator) 42f else 22f
+                                sign(angleDiff) * intensity
+                            } else {
+                                0f
+                            }
+
+                            // Steer into corner with drift
+                            val targetSteerAngle = segmentAngle + driftOffset
+                            val steerDuration = when {
+                                action.isFirst -> if (isNitroMutator) 90 else 140
+                                isSharpCorner -> if (isNitroMutator) 65 else 95
+                                else -> if (isNitroMutator) 45 else 75
+                            }
+
                             carState.animAngle.animateTo(
-                                targetValue = targetAngle,
+                                targetValue = targetSteerAngle,
                                 animationSpec = tween(durationMillis = steerDuration, easing = LinearOutSlowInEasing)
                             )
+                            previousHeading = segmentAngle
 
-                            // Physics velocity profile:
-                            // - First step: Accelerate (FastOutLinearInEasing)
-                            // - Intermediate steps: Swift Linear Cruise (LinearEasing)
-                            // - Last step: Decelerate to stop (LinearOutSlowInEasing)
+                            // Velocity timing profile (1d60 Nitro = fast continuous drift cruising!)
                             val (stepDuration, easing) = when {
-                                action.isFirst && action.isLast -> Pair(320, FastOutSlowInEasing)
-                                action.isFirst -> Pair(210, FastOutLinearInEasing)
-                                action.isLast -> Pair(260, LinearOutSlowInEasing)
-                                else -> Pair(150, LinearEasing)
+                                action.isFirst && action.isLast -> Pair(if (isNitroMutator) 200 else 320, FastOutSlowInEasing)
+                                action.isFirst -> Pair(if (isNitroMutator) 120 else 200, FastOutLinearInEasing)
+                                action.isLast -> Pair(if (isNitroMutator) 170 else 260, LinearOutSlowInEasing)
+                                else -> {
+                                    // Intermediate cruise speed
+                                    if (isNitroMutator) {
+                                        if (isSharpCorner) Pair(70, FastOutSlowInEasing) else Pair(55, LinearEasing)
+                                    } else {
+                                        if (isSharpCorner) Pair(140, FastOutSlowInEasing) else Pair(115, LinearEasing)
+                                    }
+                                }
                             }
 
                             launch {
@@ -174,49 +211,60 @@ fun RacetrackCanvas(
                                 targetValue = targetY,
                                 animationSpec = tween(durationMillis = stepDuration, easing = easing)
                             )
+
+                            // Counter-steer recovery right after sharp drift corners
+                            if (isSharpCorner && !action.isLast && !isSheepGame) {
+                                carState.animAngle.animateTo(
+                                    targetValue = segmentAngle,
+                                    animationSpec = tween(durationMillis = if (isNitroMutator) 40 else 60, easing = LinearEasing)
+                                )
+                            }
                         }
                         is MoveAction.BridgeLaunch -> {
-                            // Brief 120ms pause at bridge base before acceleration rocket launch
-                            delay(120)
+                            // Brief pause at bridge base before acceleration boost
+                            delay(if (isNitroMutator) 60 else 120)
                             val dx = action.toTile.x - action.fromTile.x
                             val dy = action.toTile.y - action.fromTile.y
                             val bridgeAngle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
 
                             carState.animAngle.animateTo(
                                 targetValue = bridgeAngle,
-                                animationSpec = tween(durationMillis = 100, easing = LinearEasing)
+                                animationSpec = tween(durationMillis = 80, easing = LinearEasing)
                             )
 
                             // High-speed bridge traversal
+                            val bridgeDuration = if (isNitroMutator) 280 else 400
                             launch {
                                 carState.animX.animateTo(
                                     targetValue = action.toTile.x,
-                                    animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = bridgeDuration, easing = FastOutSlowInEasing)
                                 )
                             }
                             carState.animY.animateTo(
                                 targetValue = action.toTile.y,
-                                animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
+                                animationSpec = tween(durationMillis = bridgeDuration, easing = FastOutSlowInEasing)
                             )
+                            previousHeading = bridgeAngle
                         }
                         is MoveAction.OilSlide -> {
                             // Spin out 360 degrees and slide backwards into destination tile
-                            delay(100)
+                            delay(if (isNitroMutator) 60 else 100)
+                            val spinDuration = if (isNitroMutator) 320 else 450
                             launch {
                                 carState.animAngle.animateTo(
                                     targetValue = carState.animAngle.value + 360f,
-                                    animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = spinDuration, easing = FastOutSlowInEasing)
                                 )
                             }
                             launch {
                                 carState.animX.animateTo(
                                     targetValue = action.toTile.x,
-                                    animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(durationMillis = spinDuration, easing = FastOutSlowInEasing)
                                 )
                             }
                             carState.animY.animateTo(
                                 targetValue = action.toTile.y,
-                                animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing)
+                                animationSpec = tween(durationMillis = spinDuration, easing = FastOutSlowInEasing)
                             )
                         }
                     }
@@ -231,7 +279,7 @@ fun RacetrackCanvas(
                     val flowAngle = (atan2(flowDy.toDouble(), flowDx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
                     carState.animAngle.animateTo(
                         targetValue = flowAngle,
-                        animationSpec = tween(durationMillis = 160, easing = LinearEasing)
+                        animationSpec = tween(durationMillis = 140, easing = LinearEasing)
                     )
                 }
 
@@ -383,7 +431,7 @@ fun RacetrackCanvas(
                     center = Offset(drawX, drawY + 2f)
                 )
 
-                // Draw Rotated Game Piece Token Sprite
+                // Draw Rotated Game Piece Token Sprite with Dynamic Drift Angle
                 withTransform({
                     translate(drawX - tokenWidth / 2f, drawY - tokenHeight / 2f)
                     rotate(if (isSheepGame) 0f else tokenRotation, pivot = Offset(tokenWidth / 2f, tokenHeight / 2f))
