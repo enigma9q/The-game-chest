@@ -18,12 +18,21 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gamechest.core.model.*
 import com.gamechest.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
+
+private sealed class MoveAction {
+    data class DriveStep(val tile: TileNode, val isFirst: Boolean, val isLast: Boolean) : MoveAction()
+    data class BridgeLaunch(val fromTile: TileNode, val toTile: TileNode) : MoveAction()
+    data class OilSlide(val fromTile: TileNode, val toTile: TileNode) : MoveAction()
+}
 
 @Composable
 fun RacetrackCanvas(
@@ -45,7 +54,6 @@ fun RacetrackCanvas(
     val textMeasurer = rememberTextMeasurer()
 
     // Driving Car Animated State for Each Player
-    val scope = rememberCoroutineScope()
     class PlayerCarAnim(
         val animX: Animatable<Float, AnimationVector1D>,
         val animY: Animatable<Float, AnimationVector1D>,
@@ -53,6 +61,7 @@ fun RacetrackCanvas(
     )
 
     val playerCarStates = remember { mutableStateMapOf<String, PlayerCarAnim>() }
+    val lastSettledTileMap = remember { mutableStateMapOf<String, Int>() }
 
     // Initialize/sync car animation states
     players.forEach { player ->
@@ -63,55 +72,170 @@ fun RacetrackCanvas(
                 animY = Animatable(startTile.y),
                 animAngle = Animatable(0f)
             )
+            lastSettledTileMap[player.profile.id] = player.currentTileId
         }
     }
 
-    // Trigger smooth fluid driving animations when player moves
+    // Step-by-Step Waypoint Traversal along the track path with Acceleration, Cruising, Deceleration, and Bridge/Oil transitions
     players.forEach { player ->
         val carState = playerCarStates[player.profile.id]
-        if (carState != null) {
-            val targetTile = layout.tiles.find { it.id == player.currentTileId } ?: layout.tiles.first()
-            val currX = carState.animX.value
-            val currY = carState.animY.value
+        val fromTileId = lastSettledTileMap[player.profile.id] ?: player.currentTileId
+        val targetTileId = player.currentTileId
 
-            if (currX != targetTile.x || currY != targetTile.y) {
-                LaunchedEffect(player.currentTileId) {
-                    val dx = targetTile.x - currX
-                    val dy = targetTile.y - currY
-                    val targetAngle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
-
-                    // 1. Fluid steer turn towards target
-                    carState.animAngle.animateTo(
-                        targetValue = targetAngle,
-                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
-                    )
-
-                    // 2. Drive smoothly along path to destination
-                    launch {
-                        carState.animX.animateTo(
-                            targetValue = targetTile.x,
-                            animationSpec = tween(durationMillis = 350, easing = LinearOutSlowInEasing)
-                        )
-                    }
-                    launch {
-                        carState.animY.animateTo(
-                            targetValue = targetTile.y,
-                            animationSpec = tween(durationMillis = 350, easing = LinearOutSlowInEasing)
-                        )
-                    }
-
-                    // 3. Align slightly towards track flow when parked
-                    val nextTile = layout.tiles.getOrNull(targetTile.index + 1)
-                    if (nextTile != null) {
-                        val flowDx = nextTile.x - targetTile.x
-                        val flowDy = nextTile.y - targetTile.y
-                        val flowAngle = (atan2(flowDy.toDouble(), flowDx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
-                        carState.animAngle.animateTo(
-                            targetValue = flowAngle,
-                            animationSpec = tween(durationMillis = 150, easing = LinearEasing)
-                        )
+        if (carState != null && fromTileId != targetTileId) {
+            LaunchedEffect(targetTileId) {
+                // 1. Build the path of actions:
+                // Check if targetTileId was reached via a Bridge or Oil Spill connection
+                val triggerConnection = layout.connections.find { conn ->
+                    conn.toTileId == targetTileId &&
+                    if (conn.type == ConnectionType.TURBO_RAMP) {
+                        conn.fromTileId >= fromTileId
+                    } else {
+                        conn.fromTileId >= fromTileId
                     }
                 }
+
+                val actions = mutableListOf<MoveAction>()
+
+                if (triggerConnection != null && triggerConnection.fromTileId != fromTileId) {
+                    // Phase A: Drive step-by-step along track to connection entrance tile
+                    val intermediateIds = (fromTileId + 1..triggerConnection.fromTileId).toList()
+                    intermediateIds.forEachIndexed { idx, id ->
+                        val tile = layout.tiles.find { it.id == id } ?: return@forEachIndexed
+                        val isFirst = idx == 0
+                        val isLast = idx == intermediateIds.size - 1
+                        actions.add(MoveAction.DriveStep(tile, isFirst = isFirst, isLast = isLast))
+                    }
+
+                    // Phase B: Launch across bridge or slide on oil spill
+                    val fromTile = layout.tiles.find { it.id == triggerConnection.fromTileId }
+                    val toTile = layout.tiles.find { it.id == triggerConnection.toTileId }
+                    if (fromTile != null && toTile != null) {
+                        if (triggerConnection.type == ConnectionType.TURBO_RAMP) {
+                            actions.add(MoveAction.BridgeLaunch(fromTile, toTile))
+                        } else {
+                            actions.add(MoveAction.OilSlide(fromTile, toTile))
+                        }
+                    }
+                } else {
+                    // Standard step-by-step movement through numbers going up or down
+                    val stepIds = if (fromTileId < targetTileId) {
+                        (fromTileId + 1..targetTileId).toList()
+                    } else {
+                        (fromTileId - 1 downTo targetTileId).toList()
+                    }
+
+                    stepIds.forEachIndexed { idx, id ->
+                        val tile = layout.tiles.find { it.id == id } ?: return@forEachIndexed
+                        val isFirst = idx == 0
+                        val isLast = idx == stepIds.size - 1
+                        actions.add(MoveAction.DriveStep(tile, isFirst = isFirst, isLast = isLast))
+                    }
+                }
+
+                // 2. Animate sequentially through actions with acceleration and deceleration
+                actions.forEach { action ->
+                    when (action) {
+                        is MoveAction.DriveStep -> {
+                            val targetX = action.tile.x
+                            val targetY = action.tile.y
+                            val curX = carState.animX.value
+                            val curY = carState.animY.value
+
+                            val dx = targetX - curX
+                            val dy = targetY - curY
+                            val targetAngle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
+
+                            // Quick dynamic steering
+                            val steerDuration = if (action.isFirst) 140 else 90
+                            carState.animAngle.animateTo(
+                                targetValue = targetAngle,
+                                animationSpec = tween(durationMillis = steerDuration, easing = LinearOutSlowInEasing)
+                            )
+
+                            // Physics velocity profile:
+                            // - First step: Accelerate (FastOutLinearInEasing)
+                            // - Intermediate steps: Swift Linear Cruise (LinearEasing)
+                            // - Last step: Decelerate to stop (LinearOutSlowInEasing)
+                            val (stepDuration, easing) = when {
+                                action.isFirst && action.isLast -> Pair(320, FastOutSlowInEasing)
+                                action.isFirst -> Pair(210, FastOutLinearInEasing)
+                                action.isLast -> Pair(260, LinearOutSlowInEasing)
+                                else -> Pair(150, LinearEasing)
+                            }
+
+                            launch {
+                                carState.animX.animateTo(
+                                    targetValue = targetX,
+                                    animationSpec = tween(durationMillis = stepDuration, easing = easing)
+                                )
+                            }
+                            carState.animY.animateTo(
+                                targetValue = targetY,
+                                animationSpec = tween(durationMillis = stepDuration, easing = easing)
+                            )
+                        }
+                        is MoveAction.BridgeLaunch -> {
+                            // Brief 120ms pause at bridge base before acceleration rocket launch
+                            delay(120)
+                            val dx = action.toTile.x - action.fromTile.x
+                            val dy = action.toTile.y - action.fromTile.y
+                            val bridgeAngle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
+
+                            carState.animAngle.animateTo(
+                                targetValue = bridgeAngle,
+                                animationSpec = tween(durationMillis = 100, easing = LinearEasing)
+                            )
+
+                            // High-speed bridge traversal
+                            launch {
+                                carState.animX.animateTo(
+                                    targetValue = action.toTile.x,
+                                    animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
+                                )
+                            }
+                            carState.animY.animateTo(
+                                targetValue = action.toTile.y,
+                                animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing)
+                            )
+                        }
+                        is MoveAction.OilSlide -> {
+                            // Spin out 360 degrees and slide backwards into destination tile
+                            delay(100)
+                            launch {
+                                carState.animAngle.animateTo(
+                                    targetValue = carState.animAngle.value + 360f,
+                                    animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing)
+                                )
+                            }
+                            launch {
+                                carState.animX.animateTo(
+                                    targetValue = action.toTile.x,
+                                    animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing)
+                                )
+                            }
+                            carState.animY.animateTo(
+                                targetValue = action.toTile.y,
+                                animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing)
+                            )
+                        }
+                    }
+                }
+
+                // 3. Smooth parking alignment towards next road segment
+                val finalTile = layout.tiles.find { it.id == targetTileId }
+                val nextTile = finalTile?.let { layout.tiles.getOrNull(it.index + 1) }
+                if (finalTile != null && nextTile != null) {
+                    val flowDx = nextTile.x - finalTile.x
+                    val flowDy = nextTile.y - finalTile.y
+                    val flowAngle = (atan2(flowDy.toDouble(), flowDx.toDouble()) * 180.0 / Math.PI).toFloat() + 90f
+                    carState.animAngle.animateTo(
+                        targetValue = flowAngle,
+                        animationSpec = tween(durationMillis = 160, easing = LinearEasing)
+                    )
+                }
+
+                lastSettledTileMap[player.profile.id] = targetTileId
             }
         }
     }
