@@ -51,8 +51,8 @@ fun RacetrackCanvas(
 ) {
     // Dynamically load board artwork and token sprites via AssetProvider
     val isSheepGame = layout.backgroundImageAsset?.contains("sheep") == true
-    val isNitroMutator = activeMutators.contains(MutatorId.NITRO_TARGET_OVERDRIVE) ||
-            activeMutators.contains(MutatorId.NITRO_ASSIST_OVERDRIVE)
+    val isNitroMutator = activeMutators.contains(MutatorId.NITRO_TARGET_1D60) ||
+            activeMutators.contains(MutatorId.NITRO_ASSIST_1D60)
     val isReverseHazard = activeMutators.contains(MutatorId.REVERSE_HAZARD_OVERDRIVE)
 
     val assetProvider = LocalAssetProvider.current
