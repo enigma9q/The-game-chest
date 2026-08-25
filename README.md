@@ -4,15 +4,6 @@ A modular, cross-platform (Windows PC & Android) digital board game hub featurin
 
 ---
 
-## 📲 Download & Play (v0.0.12)
-
-You can directly download the latest releases for Windows and Android:
-
-- 🪟 **[Download Windows Desktop App (TheGameChest-Windows-v0.0.12.zip)](https://github.com/enigma9q/The-game-chest/releases/download/v0.0.12/TheGameChest-Windows-v0.0.12.zip)** (Standalone `.exe` included)
-- 🤖 **[Download Android APK (TheGameChest-v0.0.12.apk)](https://github.com/enigma9q/The-game-chest/releases/download/v0.0.12/TheGameChest-v0.0.12.apk)**
-
----
-
 ## 🌐 Local Wi-Fi Co-Op Multiplayer (Cross-Platform PC & Android)
 
 Play together seamlessly across any Windows PC and Android phones/tablets on the same local Wi-Fi:
