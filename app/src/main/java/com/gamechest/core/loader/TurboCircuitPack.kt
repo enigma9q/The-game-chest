@@ -62,62 +62,62 @@ object TurboCircuitPack {
 
         // Exact coordinates matched to the schematic diagram (1024 x 850)
         val rawNodeCoords = listOf(
-            Pair(90f, 760f),   // 0: START
+            Pair(89.5f, 760.6f),  // 0: START
             // Outer bottom row:
-            Pair(208f, 765f),  // 1
-            Pair(316f, 765f),  // 2
-            Pair(424f, 765f),  // 3
-            Pair(534f, 765f),  // 4 (Oil Spill 3 landing from 25)
-            Pair(644f, 765f),  // 5 (Oil Spill 3 landing from 26)
-            Pair(748f, 765f),  // 6
-            Pair(858f, 760f),  // 7 (Bridge 1 launchpad: 7 -> 29)
+            Pair(208.2f, 764.8f), // 1
+            Pair(316.5f, 765.4f), // 2
+            Pair(424.6f, 765.0f), // 3
+            Pair(533.7f, 759.8f), // 4 (Oil Spill 3 landing from 25)
+            Pair(643.1f, 761.8f), // 5 (Oil Spill 3 landing from 26)
+            Pair(748.0f, 763.9f), // 6
+            Pair(857.2f, 760.6f), // 7 (Bridge 1 launchpad: 7 -> 29)
             // Outer right column:
-            Pair(880f, 638f),  // 8
-            Pair(896f, 532f),  // 9 (Centered inside slot)
-            Pair(898f, 414f),  // 10
-            Pair(888f, 310f),  // 11 (Bridge 3 launchpad: 11 -> 31)
-            Pair(856f, 156f),  // 12 (Oil Spill 1 landing from 33)
+            Pair(881.6f, 637.7f), // 8
+            Pair(896.4f, 531.7f), // 9
+            Pair(898.4f, 414.3f), // 10
+            Pair(889.4f, 307.1f), // 11 (Bridge 3 launchpad: 11 -> 31)
+            Pair(852.8f, 154.7f), // 12 (Oil Spill 1 landing from 33)
             // Outer top row:
-            Pair(744f, 86f),   // 13
-            Pair(636f, 86f),   // 14 (Bridge 4 launchpad: 14 -> 35)
-            Pair(526f, 86f),   // 15
-            Pair(418f, 86f),   // 16
-            Pair(310f, 86f),   // 17
-            Pair(198f, 108f),  // 18 (Bridge 5 launchpad: 18 -> 37)
+            Pair(743.7f, 86.0f),  // 13
+            Pair(635.8f, 86.1f),  // 14 (Bridge 4 launchpad: 14 -> 35)
+            Pair(525.7f, 86.0f),  // 15
+            Pair(417.4f, 86.0f),  // 16
+            Pair(309.9f, 85.6f),  // 17
+            Pair(196.8f, 107.6f), // 18 (Bridge 5 launchpad: 18 -> 37)
             // Outer left column:
-            Pair(126f, 186f),  // 19
-            Pair(54f, 270f),   // 20
-            Pair(54f, 374f),   // 21
-            Pair(66f, 490f),   // 22 (Oil Spill 2 landing from 41)
-            Pair(74f, 578f),   // 23
-            Pair(176f, 604f),  // 24
+            Pair(125.9f, 185.8f), // 19
+            Pair(53.7f, 270.3f),  // 20
+            Pair(54.9f, 373.5f),  // 21
+            Pair(72.5f, 489.1f),  // 22 (Oil Spill 2 landing from 41)
+            Pair(73.4f, 578.3f),  // 23
+            Pair(176.1f, 604.3f), // 24
             // Middle loop:
-            Pair(284f, 608f),  // 25 (Oil Spill 3 launchpad: 25 -> 4)
-            Pair(386f, 608f),  // 26 (Oil Spill 3 launchpad: 26 -> 5)
-            Pair(508f, 626f),  // 27 (Bridge 2 launchpad: 27 -> 45)
-            Pair(616f, 608f),  // 28
-            Pair(724f, 608f),  // 29 (Bridge 1 landing from 7)
-            Pair(774f, 514f),  // 30
-            Pair(782f, 412f),  // 31 (Bridge 3 landing from 11)
-            Pair(784f, 306f),  // 32
-            Pair(724f, 222f),  // 33 (Oil Spill 1 launchpad: 33 -> 12)
-            Pair(618f, 222f),  // 34
-            Pair(508f, 222f),  // 35 (Bridge 4 landing from 14)
-            Pair(406f, 220f),  // 36
-            Pair(310f, 230f),  // 37 (Centered inside slot - shifted right and up)
-            Pair(196f, 240f),  // 38
-            Pair(138f, 314f),  // 39
-            Pair(150f, 416f),  // 40
-            Pair(220f, 492f),  // 41 (Oil Spill 2 launchpad: 41 -> 22)
-            Pair(328f, 508f),  // 42
-            Pair(430f, 508f),  // 43
-            Pair(546f, 498f),  // 44
-            Pair(650f, 460f),  // 45 (Bridge 2 landing from 27)
+            Pair(286.5f, 610.3f), // 25 (Oil Spill 3 launchpad: 25 -> 4)
+            Pair(384.0f, 610.7f), // 26 (Oil Spill 3 launchpad: 26 -> 5)
+            Pair(509.3f, 626.1f), // 27 (Bridge 2 launchpad: 27 -> 45)
+            Pair(616.7f, 607.5f), // 28
+            Pair(723.3f, 606.3f), // 29 (Bridge 1 landing from 7)
+            Pair(773.6f, 513.6f), // 30
+            Pair(783.4f, 412.0f), // 31 (Bridge 3 landing from 11)
+            Pair(783.9f, 306.1f), // 32
+            Pair(727.1f, 220.4f), // 33 (Oil Spill 1 launchpad: 33 -> 12)
+            Pair(618.3f, 222.2f), // 34
+            Pair(508.6f, 221.5f), // 35 (Bridge 4 landing from 14)
+            Pair(405.3f, 220.5f), // 36
+            Pair(308.7f, 227.7f), // 37 (Bridge 5 landing from 18)
+            Pair(196.0f, 239.8f), // 38
+            Pair(137.2f, 314.7f), // 39
+            Pair(149.4f, 417.3f), // 40
+            Pair(215.9f, 496.9f), // 41 (Oil Spill 2 launchpad: 41 -> 22)
+            Pair(328.4f, 508.8f), // 42
+            Pair(430.4f, 508.2f), // 43
+            Pair(546.3f, 498.0f), // 44
+            Pair(650.6f, 460.9f), // 45 (Bridge 2 landing from 27)
             // Inner straight to finish:
-            Pair(656f, 366f),  // 46
-            Pair(546f, 366f),  // 47
-            Pair(436f, 366f),  // 48
-            Pair(312f, 366f)   // 49: FINISH
+            Pair(656.1f, 365.6f), // 46
+            Pair(547.3f, 366.3f), // 47
+            Pair(437.0f, 365.7f), // 48
+            Pair(313.7f, 359.4f)  // 49: FINISH
         )
 
         val imageW = 1024f
