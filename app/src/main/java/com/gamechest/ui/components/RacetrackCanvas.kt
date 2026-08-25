@@ -108,11 +108,24 @@ fun RacetrackCanvas(
                 val startTile = layout.tiles.find { it.id == fromTileId } ?: layout.tiles.first()
                 points.add(TrackPoint(startTile.x, startTile.y))
 
-                // Check if this move was a Bridge/Ramp or Oil Spill shortcut/hazard
-                // A connection ONLY triggers if the player's trajectory reached conn.fromTileId and landed on conn.toTileId
-                val triggerConnection = layout.connections.find { conn ->
-                    conn.toTileId == targetTileId && conn.fromTileId > fromTileId
+                // Check if this move was a Bridge/Ramp or Oil Spill shortcut/hazard:
+                // - A Bridge/Ramp moves the player FORWARD by a large offset (+18..+22) to a higher tile ID
+                val bridgeConnection = layout.connections.find { conn ->
+                    conn.type == ConnectionType.TURBO_RAMP &&
+                    conn.toTileId == targetTileId &&
+                    conn.fromTileId >= fromTileId &&
+                    (targetTileId - fromTileId > 6 || isNitroMutator)
                 }
+
+                // - An Oil Spill drops the player BACKWARD to a lower tile ID (4, 5, 12, 22) only when entering from (25, 26, 33, 41)
+                val oilConnection = layout.connections.find { conn ->
+                    conn.type == ConnectionType.OIL_SLICK &&
+                    conn.toTileId == targetTileId &&
+                    conn.fromTileId >= fromTileId &&
+                    targetTileId < fromTileId // Drops backward!
+                }
+
+                val triggerConnection = bridgeConnection ?: oilConnection
 
                 val finishId = layout.finishTileId
                 // Check if player bounced off finish line
