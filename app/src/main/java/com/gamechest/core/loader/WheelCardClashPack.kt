@@ -76,7 +76,7 @@ object WheelCardClashPack {
                 - Symbol / Action (Reverse, Double Play, Spin)
                 - Playing a Wild card (Color Choice, Bet & Spin, All-Spin)
                 
-                If you have no playable card, draw 1 card from the Draw Pile.
+                If you have no playable card in hand, draw 1 card from the Draw Pile. If the drawn card can be played, you may place it down immediately; if you still cannot play, you pass the round.
                 
                 ## Action Cards
                 - **Direction Reverse**: Reverses clockwise/counter-clockwise play direction.

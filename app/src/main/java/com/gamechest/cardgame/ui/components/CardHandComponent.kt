@@ -34,6 +34,8 @@ fun PlayerHandRow(
     isCurrentTurn: Boolean,
     isCardPlayable: (WheelCard) -> Boolean,
     onPlayCard: (WheelCard) -> Unit,
+    cardWidth: androidx.compose.ui.unit.Dp = 76.dp,
+    cardHeight: androidx.compose.ui.unit.Dp = 114.dp,
     modifier: Modifier = Modifier
 ) {
     var selectedCardId by remember { mutableStateOf<String?>(null) }
@@ -107,8 +109,8 @@ fun PlayerHandRow(
                         isFaceUp = true,
                         isPlayable = playable,
                         isSelected = isSelected,
-                        cardWidth = 76.dp,
-                        cardHeight = 114.dp,
+                        cardWidth = cardWidth,
+                        cardHeight = cardHeight,
                         onClick = {
                             if (playable) {
                                 onPlayCard(card)

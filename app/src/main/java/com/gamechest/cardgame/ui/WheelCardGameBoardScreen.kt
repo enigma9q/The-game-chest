@@ -39,11 +39,19 @@ fun WheelCardGameBoardScreen(
     localPlayerId: String? = null,
     isHost: Boolean = true,
     isWifiCoop: Boolean = false,
+    isDesktop: Boolean = false,
     onExitGame: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by engine.state.collectAsState()
     val scope = rememberCoroutineScope()
+
+    val cardScale = if (isDesktop) 1.5f else 1.0f
+    val centerCardWidth = (84 * cardScale).dp
+    val centerCardHeight = (124 * cardScale).dp
+    val centerWheelSize = (190 * cardScale).dp
+    val handCardWidth = (76 * cardScale).dp
+    val handCardHeight = (114 * cardScale).dp
 
     var isWheelSpinningAnim by remember { mutableStateOf(false) }
     var targetWheelResult by remember { mutableStateOf<Int?>(null) }
@@ -92,16 +100,16 @@ fun WheelCardGameBoardScreen(
                     IconButton(
                         onClick = { showMenuDialog = true },
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(if (isDesktop) 48.dp else 40.dp)
                             .clip(CircleShape)
                             .background(SurfaceDarkCard)
                     ) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = PrimaryNeon)
+                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = PrimaryNeon, modifier = Modifier.size(if (isDesktop) 26.dp else 22.dp))
                     }
 
                     // Opponents Badges
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         state.players.forEachIndexed { idx, player ->
@@ -121,19 +129,19 @@ fun WheelCardGameBoardScreen(
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x6600E5FF))
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = if (isDesktop) 14.dp else 10.dp, vertical = if (isDesktop) 8.dp else 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
                                 if (state.isClockwise) Icons.Default.RotateRight else Icons.Default.RotateLeft,
                                 contentDescription = null,
                                 tint = PrimaryNeon,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(if (isDesktop) 20.dp else 16.dp)
                             )
                             Text(
                                 text = if (state.isClockwise) "CLOCKWISE" else "COUNTER",
-                                fontSize = 10.sp,
+                                fontSize = if (isDesktop) 13.sp else 10.sp,
                                 fontWeight = FontWeight.Black,
                                 color = PrimaryNeon
                             )
@@ -141,7 +149,7 @@ fun WheelCardGameBoardScreen(
                     }
                 }
 
-                // ==================== CENTER: THE WHEEL & CARD PILES ====================
+                // ==================== CENTER: THE WHEEL & CARD PILES (50% LARGER ON DESKTOP) ====================
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -153,22 +161,22 @@ fun WheelCardGameBoardScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 1. DRAW PILE (Tap to draw)
+                        // 1. DRAW PILE (Tap to draw 1 card)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = "DRAW PILE (${state.drawPile.size})",
-                                fontSize = 11.sp,
+                                fontSize = if (isDesktop) 14.sp else 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextSecondary
                             )
                             PlayingCardView(
                                 card = null,
                                 isFaceUp = false,
-                                cardWidth = 84.dp,
-                                cardHeight = 124.dp,
+                                cardWidth = centerCardWidth,
+                                cardHeight = centerCardHeight,
                                 onClick = {
                                     if (isMyTurn && state.turnPhase == WheelCardTurnPhase.WAITING_TO_PLAY) {
                                         engine.drawCardFromPile()
@@ -177,16 +185,16 @@ fun WheelCardGameBoardScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(28.dp))
+                        Spacer(modifier = Modifier.width(if (isDesktop) 44.dp else 28.dp))
 
-                        // 2. THE CENTER INTERACTIVE WHEEL
+                        // 2. THE CENTER INTERACTIVE WHEEL (50% BIGGER ON DESKTOP)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = "WHEEL OF PENALTY",
-                                fontSize = 11.sp,
+                                fontSize = if (isDesktop) 14.sp else 11.sp,
                                 fontWeight = FontWeight.Black,
                                 color = AccentYellow,
                                 letterSpacing = 1.sp
@@ -206,40 +214,40 @@ fun WheelCardGameBoardScreen(
                                         engine.resolveWheelSpin(result)
                                     }
                                 },
-                                wheelSize = 190.dp,
+                                wheelSize = centerWheelSize,
                                 enabled = isMyTurn && (state.turnPhase == WheelCardTurnPhase.WHEEL_SPINNING || state.turnPhase == WheelCardTurnPhase.ALL_SPIN_STEP)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(28.dp))
+                        Spacer(modifier = Modifier.width(if (isDesktop) 44.dp else 28.dp))
 
                         // 3. DISCARD PILE (Top Card to match)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
                                     text = "DISCARD (MATCH:",
-                                    fontSize = 11.sp,
+                                    fontSize = if (isDesktop) 14.sp else 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextSecondary
                                 )
                                 Text(
                                     text = state.activeColor.displayName.uppercase(),
-                                    fontSize = 11.sp,
+                                    fontSize = if (isDesktop) 14.sp else 11.sp,
                                     fontWeight = FontWeight.Black,
                                     color = parseHexColor(state.activeColor.hexColor)
                                 )
-                                Text(")", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                                Text(")", fontSize = if (isDesktop) 14.sp else 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
                             }
 
                             val topCard = state.discardPile.lastOrNull()
                             PlayingCardView(
                                 card = topCard,
                                 isFaceUp = true,
-                                cardWidth = 84.dp,
-                                cardHeight = 124.dp
+                                cardWidth = centerCardWidth,
+                                cardHeight = centerCardHeight
                             )
                         }
                     }
@@ -280,17 +288,19 @@ fun WheelCardGameBoardScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = SurfaceDarkCard, contentColor = TextSecondary),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("Pass Turn", fontSize = 12.sp)
+                                Text("Pass Turn", fontSize = if (isDesktop) 13.sp else 12.sp)
                             }
                         }
                     }
 
-                    // Render Local Player Hand
+                    // Render Local Player Hand (50% larger on desktop)
                     currentPlayer?.let { player ->
                         PlayerHandRow(
                             player = player,
                             isCurrentTurn = isMyTurn && state.turnPhase == WheelCardTurnPhase.WAITING_TO_PLAY,
                             isCardPlayable = { card -> engine.isCardPlayable(card) },
+                            cardWidth = handCardWidth,
+                            cardHeight = handCardHeight,
                             onPlayCard = { card ->
                                 if (isMyTurn) {
                                     engine.playCard(card.id)

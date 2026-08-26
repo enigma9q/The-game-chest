@@ -84,6 +84,7 @@ fun main() = application {
                                         localPlayerId = localPlayerId,
                                         isHost = isHost,
                                         isWifiCoop = activeTransportMode == TransportMode.WIFI_LAN,
+                                        isDesktop = true,
                                         onExitGame = {
                                             activeCardEngine = null
                                             currentScreen = ScreenState.LOBBY
