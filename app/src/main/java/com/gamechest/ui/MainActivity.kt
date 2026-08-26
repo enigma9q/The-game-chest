@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.gamechest.cardgame.engine.WheelCardEngine
+import com.gamechest.cardgame.ui.WheelCardGameBoardScreen
 import com.gamechest.core.engine.GameEngine
 import com.gamechest.core.loader.GamePackManager
+import com.gamechest.core.model.GameCategory
 import com.gamechest.core.model.GamePack
 import com.gamechest.core.model.PlayerProfile
 import com.gamechest.core.network.TransportMode
@@ -35,12 +38,13 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = DarkBackground
                     ) {
-                            val wifiTransport = remember { WifiLanTransport() }
+                        val wifiTransport = remember { WifiLanTransport() }
                         var currentScreen by remember { mutableStateOf(ScreenState.LOBBY) }
                         var selectedPack by remember {
                             mutableStateOf(packManager.getAllPacks().first())
                         }
                         var activeEngine by remember { mutableStateOf<GameEngine?>(null) }
+                        var activeCardEngine by remember { mutableStateOf<WheelCardEngine?>(null) }
                         var activeTransportMode by remember { mutableStateOf(TransportMode.SAME_DEVICE_LOCAL) }
                         var localPlayerId by remember { mutableStateOf<String?>(null) }
                         var isHost by remember { mutableStateOf(true) }
@@ -51,12 +55,16 @@ class MainActivity : ComponentActivity() {
                                     gamePack = selectedPack,
                                     wifiTransport = wifiTransport,
                                     onStartGame = { players, mutators, transportMode, myId, hostFlag ->
-                                        val engine = GameEngine(
-                                            initialPack = selectedPack,
-                                            initialProfiles = players,
-                                            activeMutators = mutators
-                                        )
-                                        activeEngine = engine
+                                        if (selectedPack.manifest.category == GameCategory.CARD_GAME) {
+                                            activeCardEngine = WheelCardEngine(players)
+                                        } else {
+                                            val engine = GameEngine(
+                                                initialPack = selectedPack,
+                                                initialProfiles = players,
+                                                activeMutators = mutators
+                                            )
+                                            activeEngine = engine
+                                        }
                                         activeTransportMode = transportMode
                                         localPlayerId = myId
                                         isHost = hostFlag
@@ -68,18 +76,34 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             ScreenState.GAME_BOARD -> {
-                                activeEngine?.let { engine ->
-                                    GameBoardScreen(
-                                        engine = engine,
-                                        wifiTransport = wifiTransport,
-                                        localPlayerId = localPlayerId,
-                                        isHost = isHost,
-                                        isWifiCoop = activeTransportMode == TransportMode.WIFI_LAN,
-                                        onExitGame = {
-                                            activeEngine = null
-                                            currentScreen = ScreenState.LOBBY
-                                        }
-                                    )
+                                if (selectedPack.manifest.category == GameCategory.CARD_GAME) {
+                                    activeCardEngine?.let { cardEngine ->
+                                        WheelCardGameBoardScreen(
+                                            engine = cardEngine,
+                                            wifiTransport = wifiTransport,
+                                            localPlayerId = localPlayerId,
+                                            isHost = isHost,
+                                            isWifiCoop = activeTransportMode == TransportMode.WIFI_LAN,
+                                            onExitGame = {
+                                                activeCardEngine = null
+                                                currentScreen = ScreenState.LOBBY
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    activeEngine?.let { engine ->
+                                        GameBoardScreen(
+                                            engine = engine,
+                                            wifiTransport = wifiTransport,
+                                            localPlayerId = localPlayerId,
+                                            isHost = isHost,
+                                            isWifiCoop = activeTransportMode == TransportMode.WIFI_LAN,
+                                            onExitGame = {
+                                                activeEngine = null
+                                                currentScreen = ScreenState.LOBBY
+                                            }
+                                        )
+                                    }
                                 }
                             }
                             ScreenState.PACK_BROWSER -> {

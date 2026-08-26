@@ -26,6 +26,9 @@ class GamePackManager(
 
         val saveTheSheep = SaveTheSheepPack.createPack()
         installedPacks[saveTheSheep.manifest.id] = saveTheSheep
+
+        val wheelCardClash = WheelCardClashPack.createPack()
+        installedPacks[wheelCardClash.manifest.id] = wheelCardClash
     }
 
     fun getAllPacks(): List<GamePack> {
