@@ -28,6 +28,7 @@ import com.gamechest.cardgame.model.*
 import com.gamechest.cardgame.ui.components.*
 import com.gamechest.core.network.NetworkPacket
 import com.gamechest.core.network.WifiLanTransport
+import com.gamechest.ui.platform.PreferenceStore
 import com.gamechest.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -78,9 +79,19 @@ fun WheelCardGameBoardScreen(
         }
     }
 
+    var isWhiteTheme by remember {
+        mutableStateOf(PreferenceStore.getBoolean("wheel_card_white_theme", false))
+    }
+
+    val bgTableColor = if (isWhiteTheme) Color(0xFFF8FAFC) else DarkBackground
+    val primaryTextColor = if (isWhiteTheme) Color(0xFF0F172A) else TextPrimary
+    val secondaryTextColor = if (isWhiteTheme) Color(0xFF475569) else TextSecondary
+    val cardContainerColor = if (isWhiteTheme) Color(0xFFFFFFFF) else SurfaceDarkCard
+    val tableBorderColor = if (isWhiteTheme) Color(0xFFCBD5E1) else BorderDark
+
     Surface(
         modifier = modifier.fillMaxSize(),
-        color = DarkBackground
+        color = bgTableColor
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -89,7 +100,7 @@ fun WheelCardGameBoardScreen(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // ==================== TOP BAR: MENU & OPPONENTS ====================
+                // ==================== TOP BAR: MENU, OPPONENTS & THEME TOGGLE ====================
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -97,14 +108,41 @@ fun WheelCardGameBoardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = { showMenuDialog = true },
-                        modifier = Modifier
-                            .size(if (isDesktop) 48.dp else 40.dp)
-                            .clip(CircleShape)
-                            .background(SurfaceDarkCard)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = PrimaryNeon, modifier = Modifier.size(if (isDesktop) 26.dp else 22.dp))
+                        IconButton(
+                            onClick = { showMenuDialog = true },
+                            modifier = Modifier
+                                .size(if (isDesktop) 48.dp else 40.dp)
+                                .clip(CircleShape)
+                                .background(cardContainerColor)
+                                .border(1.dp, tableBorderColor, CircleShape)
+                        ) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = if (isWhiteTheme) Color(0xFF0284C7) else PrimaryNeon, modifier = Modifier.size(if (isDesktop) 26.dp else 22.dp))
+                        }
+
+                        // Theme Toggle Button (Light / Dark)
+                        IconButton(
+                            onClick = {
+                                val nextTheme = !isWhiteTheme
+                                isWhiteTheme = nextTheme
+                                PreferenceStore.setBoolean("wheel_card_white_theme", nextTheme)
+                            },
+                            modifier = Modifier
+                                .size(if (isDesktop) 48.dp else 40.dp)
+                                .clip(CircleShape)
+                                .background(cardContainerColor)
+                                .border(1.dp, tableBorderColor, CircleShape)
+                        ) {
+                            Icon(
+                                if (isWhiteTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                                contentDescription = "Toggle Theme",
+                                tint = if (isWhiteTheme) Color(0xFF334155) else AccentYellow,
+                                modifier = Modifier.size(if (isDesktop) 24.dp else 20.dp)
+                            )
+                        }
                     }
 
                     // Opponents Badges
@@ -124,9 +162,9 @@ fun WheelCardGameBoardScreen(
 
                     // Play Direction Badge
                     Surface(
-                        color = Color(0x3300E5FF),
+                        color = if (isWhiteTheme) Color(0xFFE0F2FE) else Color(0x3300E5FF),
                         shape = RoundedCornerShape(10.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x6600E5FF))
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isWhiteTheme) Color(0xFF38BDF8) else Color(0x6600E5FF))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = if (isDesktop) 14.dp else 10.dp, vertical = if (isDesktop) 8.dp else 6.dp),
@@ -136,14 +174,14 @@ fun WheelCardGameBoardScreen(
                             Icon(
                                 if (state.isClockwise) Icons.Default.RotateRight else Icons.Default.RotateLeft,
                                 contentDescription = null,
-                                tint = PrimaryNeon,
+                                tint = if (isWhiteTheme) Color(0xFF0284C7) else PrimaryNeon,
                                 modifier = Modifier.size(if (isDesktop) 20.dp else 16.dp)
                             )
                             Text(
                                 text = if (state.isClockwise) "CLOCKWISE" else "COUNTER",
                                 fontSize = if (isDesktop) 13.sp else 10.sp,
                                 fontWeight = FontWeight.Black,
-                                color = PrimaryNeon
+                                color = if (isWhiteTheme) Color(0xFF0284C7) else PrimaryNeon
                             )
                         }
                     }
@@ -170,7 +208,7 @@ fun WheelCardGameBoardScreen(
                                 text = "DRAW PILE (${state.drawPile.size})",
                                 fontSize = if (isDesktop) 14.sp else 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextSecondary
+                                color = secondaryTextColor
                             )
                             PlayingCardView(
                                 card = null,
@@ -196,7 +234,7 @@ fun WheelCardGameBoardScreen(
                                 text = "WHEEL OF PENALTY",
                                 fontSize = if (isDesktop) 14.sp else 11.sp,
                                 fontWeight = FontWeight.Black,
-                                color = AccentYellow,
+                                color = if (isWhiteTheme) Color(0xFFB45309) else AccentYellow,
                                 letterSpacing = 1.sp
                             )
                             WheelComponent(
@@ -231,7 +269,7 @@ fun WheelCardGameBoardScreen(
                                     text = "DISCARD (MATCH:",
                                     fontSize = if (isDesktop) 14.sp else 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = TextSecondary
+                                    color = secondaryTextColor
                                 )
                                 Text(
                                     text = state.activeColor.displayName.uppercase(),
@@ -239,7 +277,7 @@ fun WheelCardGameBoardScreen(
                                     fontWeight = FontWeight.Black,
                                     color = parseHexColor(state.activeColor.hexColor)
                                 )
-                                Text(")", fontSize = if (isDesktop) 14.sp else 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                                Text(")", fontSize = if (isDesktop) 14.sp else 11.sp, fontWeight = FontWeight.Bold, color = secondaryTextColor)
                             }
 
                             val topCard = state.discardPile.lastOrNull()

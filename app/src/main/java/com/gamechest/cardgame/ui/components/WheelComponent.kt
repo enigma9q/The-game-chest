@@ -33,18 +33,26 @@ import kotlin.math.*
 import kotlin.random.Random
 
 data class WheelSegment(
+    val id: Int,
     val value: Int,
     val label: String,
+    val isBomb: Boolean = false,
     val colorHex: String,
     val secondaryHex: String
 )
 
 val WHEEL_SEGMENTS = listOf(
-    WheelSegment(0, "+0", "#10B981", "#047857"), // 0 - 72 deg: Emerald (+0 Cards - Lucky Escape!)
-    WheelSegment(1, "+1", "#06B6D4", "#0E7490"), // 72 - 144 deg: Cyan (+1 Card)
-    WheelSegment(2, "+2", "#F97316", "#C2410C"), // 144 - 216 deg: Orange (+2 Cards)
-    WheelSegment(3, "+3", "#A855F7", "#7E22CE"), // 216 - 288 deg: Purple (+3 Cards)
-    WheelSegment(4, "+4", "#EF4444", "#B91C1C")  // 288 - 360 deg: Crimson (+4 Cards!)
+    WheelSegment(0, 2, "+2", false, "#F97316", "#C2410C"),   // 1. +2
+    WheelSegment(1, 0, "0", false, "#10B981", "#047857"),    // 2. 0
+    WheelSegment(2, 4, "+4", false, "#EF4444", "#B91C1C"),   // 3. +4
+    WheelSegment(3, 2, "+2", false, "#F97316", "#C2410C"),   // 4. +2
+    WheelSegment(4, 3, "+3", false, "#A855F7", "#7E22CE"),   // 5. +3
+    WheelSegment(5, 6, "💣", true, "#DC2626", "#7F1D1D"),    // 6. 💣 BOMB (+6 cards)
+    WheelSegment(6, 2, "+2", false, "#F97316", "#C2410C"),   // 7. +2
+    WheelSegment(7, 0, "0", false, "#10B981", "#047857"),    // 8. 0
+    WheelSegment(8, 3, "+3", false, "#A855F7", "#7E22CE"),   // 9. +3
+    WheelSegment(9, 2, "+2", false, "#F97316", "#C2410C"),   // 10. +2
+    WheelSegment(10, 4, "+4", false, "#EF4444", "#B91C1C")  // 11. +4
 )
 
 @Composable
@@ -60,23 +68,22 @@ fun WheelComponent(
     val rotationAnim = remember { Animatable(0f) }
     var currentResult by remember { mutableStateOf<Int?>(null) }
 
-    // Pointer is at Top (270 degrees in standard polar coords)
-    // Segment size = 72 degrees (360 / 5)
-    // Segment 0 center is at 36 deg, Seg 1 is 108 deg, Seg 2 is 180 deg, Seg 3 is 252 deg, Seg 4 is 324 deg
     fun calculateAngleForResult(resultVal: Int): Float {
-        val segIdx = WHEEL_SEGMENTS.indexOfFirst { it.value == resultVal }.coerceAtLeast(0)
-        val segCenter = segIdx * 72f + 36f
-        // To place segCenter at Top (270 deg): rotation = 270 - segCenter
+        val matchingIndices = WHEEL_SEGMENTS.mapIndexedNotNull { idx, s -> if (s.value == resultVal) idx else null }
+        val segIdx = matchingIndices.randomOrNull() ?: 0
+        val segmentAngle = 360f / WHEEL_SEGMENTS.size
+        val segCenter = segIdx * segmentAngle + (segmentAngle / 2f)
         val targetDeg = (270f - segCenter + 360f) % 360f
         return targetDeg
     }
 
     LaunchedEffect(isSpinning, targetResult) {
         if (isSpinning) {
-            val result = targetResult ?: Random.nextInt(0, 5)
+            val randomSegment = WHEEL_SEGMENTS.random()
+            val result = targetResult ?: randomSegment.value
             val baseAngle = calculateAngleForResult(result)
             val totalSpins = Random.nextInt(5, 8) * 360f
-            val finalTarget = totalSpins + baseAngle + Random.nextFloat() * 20f - 10f // slight organic jitter
+            val finalTarget = totalSpins + baseAngle + Random.nextFloat() * 10f - 5f // slight organic jitter
 
             rotationAnim.snapTo(0f)
             rotationAnim.animateTo(
@@ -151,12 +158,13 @@ fun WheelComponent(
             )
         }
 
-        // 2. Overlay Segment Numbers (+0, +1, +2, +3, +4)
+        // 2. Overlay Segment Numbers & Icons (11 segments)
+        val segmentAngle = 360f / WHEEL_SEGMENTS.size
         WHEEL_SEGMENTS.forEachIndexed { index, segment ->
-            val segCenterAngle = index * 72f + 36f
+            val segCenterAngle = index * segmentAngle + (segmentAngle / 2f)
             val currentRot = (rotationAnim.value + segCenterAngle) % 360f
             val rad = Math.toRadians(currentRot.toDouble())
-            val offsetDist = wheelSize.value * 0.32f
+            val offsetDist = wheelSize.value * 0.33f
             val x = (offsetDist * cos(rad)).dp
             val y = (offsetDist * sin(rad)).dp
 
@@ -164,16 +172,16 @@ fun WheelComponent(
                 modifier = Modifier
                     .offset(x = x, y = y)
                     .clip(CircleShape)
-                    .background(Color(0xDD0F172A))
-                    .border(1.5.dp, Color.White, CircleShape)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .background(if (segment.isBomb) Color(0xFF7F1D1D) else Color(0xDD0F172A))
+                    .border(1.2.dp, if (segment.isBomb) Color(0xFFEF4444) else Color.White, CircleShape)
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = segment.label,
-                    fontSize = (wheelSize.value * 0.085f).sp,
+                    fontSize = (wheelSize.value * 0.075f).sp,
                     fontWeight = FontWeight.Black,
-                    color = parseHex(segment.colorHex)
+                    color = if (segment.isBomb) Color(0xFFFDE047) else parseHex(segment.colorHex)
                 )
             }
         }

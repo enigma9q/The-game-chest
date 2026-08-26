@@ -61,7 +61,8 @@ fun PlayingCardView(
                 .size(cardWidth, cardHeight)
                 .shadow(6.dp, cardShape)
                 .clip(cardShape)
-                .border(2.dp, Color(0xFF475569), cardShape),
+                .border(2.dp, Color(0xFF475569), cardShape)
+                .clickable(enabled = onClick != null) { onClick?.invoke() },
             shape = cardShape,
             color = Color(0xFF0F172A)
         ) {

@@ -439,7 +439,13 @@ class WheelCardEngine(
         val cardsDrawn = drawCardsFromDeck(totalPenalty, mutableDeck, mutableDiscard)
         mutablePlayers[victimIdx] = victim.copy(hand = victim.hand + cardsDrawn)
 
-        val desc = "🎡 Wheel landed on +$spinResult${if (target.bonusCards > 0) " (+2 Super Spin bonus)" else ""}! ${victim.profile.name} drew +$totalPenalty cards."
+        val desc = if (spinResult == 6) {
+            "💣 BOOM! Wheel landed on the BOMB! ${victim.profile.name} drew +$totalPenalty cards!"
+        } else if (spinResult == 0 && target.bonusCards == 0) {
+            "🍀 LUCKY ESCAPE! Wheel landed on 0! ${victim.profile.name} drew 0 penalty cards!"
+        } else {
+            "🎡 Wheel landed on +$spinResult${if (target.bonusCards > 0) " (+2 Super Spin bonus)" else ""}! ${victim.profile.name} drew +$totalPenalty cards."
+        }
 
         advanceTurnInternal(
             stateToAdvance = s.copy(
