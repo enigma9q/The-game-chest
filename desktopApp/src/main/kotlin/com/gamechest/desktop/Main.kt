@@ -11,6 +11,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.gamechest.core.engine.GameEngine
 import com.gamechest.core.loader.GamePackManager
 import com.gamechest.core.network.TransportMode
+import com.gamechest.core.network.WifiLanTransport
 import com.gamechest.ui.ScreenState
 import com.gamechest.ui.components.LocalAssetProvider
 import com.gamechest.ui.editor.GamePackBrowserScreen
@@ -34,18 +35,22 @@ fun main() = application {
                     modifier = Modifier.fillMaxSize(),
                     color = DarkBackground
                 ) {
+                    val wifiTransport = remember { WifiLanTransport() }
                     var currentScreen by remember { mutableStateOf(ScreenState.LOBBY) }
                     var selectedPack by remember {
                         mutableStateOf(packManager.getAllPacks().first())
                     }
                     var activeEngine by remember { mutableStateOf<GameEngine?>(null) }
                     var activeTransportMode by remember { mutableStateOf(TransportMode.SAME_DEVICE_LOCAL) }
+                    var localPlayerId by remember { mutableStateOf<String?>(null) }
+                    var isHost by remember { mutableStateOf(true) }
 
                     when (currentScreen) {
                         ScreenState.LOBBY -> {
                             LobbyScreen(
                                 gamePack = selectedPack,
-                                onStartGame = { players, mutators, transportMode ->
+                                wifiTransport = wifiTransport,
+                                onStartGame = { players, mutators, transportMode, myId, hostFlag ->
                                     val engine = GameEngine(
                                         initialPack = selectedPack,
                                         initialProfiles = players,
@@ -53,6 +58,8 @@ fun main() = application {
                                     )
                                     activeEngine = engine
                                     activeTransportMode = transportMode
+                                    localPlayerId = myId
+                                    isHost = hostFlag
                                     currentScreen = ScreenState.GAME_BOARD
                                 },
                                 onBrowsePacks = {
@@ -64,6 +71,9 @@ fun main() = application {
                             activeEngine?.let { engine ->
                                 GameBoardScreen(
                                     engine = engine,
+                                    wifiTransport = wifiTransport,
+                                    localPlayerId = localPlayerId,
+                                    isHost = isHost,
                                     isWifiCoop = activeTransportMode == TransportMode.WIFI_LAN,
                                     onExitGame = {
                                         activeEngine = null

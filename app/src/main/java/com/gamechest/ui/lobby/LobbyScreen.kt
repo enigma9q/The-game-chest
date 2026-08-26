@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gamechest.core.engine.GameEngine
 import com.gamechest.core.model.*
 import com.gamechest.core.network.DiscoveredRoom
 import com.gamechest.core.network.NetworkPacket
@@ -33,12 +34,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun LobbyScreen(
     gamePack: GamePack,
-    onStartGame: (List<PlayerProfile>, Set<MutatorId>, TransportMode) -> Unit,
+    wifiTransport: WifiLanTransport,
+    onStartGame: (List<PlayerProfile>, Set<MutatorId>, TransportMode, String, Boolean) -> Unit,
     onBrowsePacks: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val wifiTransport = remember { WifiLanTransport() }
     val isWifiConnected by wifiTransport.isConnected.collectAsState()
     val connectedPeers by wifiTransport.connectedPeers.collectAsState()
     val localIpAddress by wifiTransport.localIpAddress.collectAsState()
@@ -63,6 +64,7 @@ fun LobbyScreen(
     var hostIpInput by remember { mutableStateOf("") }
     var clientName by remember { mutableStateOf("Player 2") }
     var clientAvatar by remember { mutableStateOf(CarAvatar.TURBO_BLUE) }
+    var myClientProfileId by remember { mutableStateOf<String?>(null) }
     var isClientReady by remember { mutableStateOf(false) }
     var isConnecting by remember { mutableStateOf(false) }
     var wifiStatusMessage by remember { mutableStateOf<String?>(null) }
@@ -79,7 +81,8 @@ fun LobbyScreen(
                 when (packet) {
                     is NetworkPacket.StartGame -> {
                         val activeProfiles = packet.initialSessionState.players.map { it.profile }
-                        onStartGame(activeProfiles, packet.initialSessionState.activeMutators, TransportMode.WIFI_LAN)
+                        val myProfileId = myClientProfileId ?: activeProfiles.getOrNull(1)?.id ?: "client"
+                        onStartGame(activeProfiles, packet.initialSessionState.activeMutators, TransportMode.WIFI_LAN, myProfileId, false)
                     }
                     else -> {}
                 }
@@ -157,10 +160,17 @@ fun LobbyScreen(
                         Button(
                             onClick = {
                                 if (transportMode == TransportMode.WIFI_LAN && wifiRole == "HOST") {
-                                    val activeProfiles = connectedPeers.mapNotNull { it.profile }
-                                    onStartGame(activeProfiles.ifEmpty { players }, selectedMutators, transportMode)
+                                    val activeProfiles = connectedPeers.mapNotNull { it.profile }.ifEmpty { players }
+                                    val initialEngine = GameEngine(gamePack, activeProfiles, selectedMutators)
+                                    val startPacket = NetworkPacket.StartGame(initialEngine.state.value)
+                                    coroutineScope.launch {
+                                        wifiTransport.sendPacket(startPacket)
+                                        val hostId = activeProfiles.first().id
+                                        onStartGame(activeProfiles, selectedMutators, transportMode, hostId, true)
+                                    }
                                 } else {
-                                    onStartGame(players, selectedMutators, transportMode)
+                                    val localId = players.first().id
+                                    onStartGame(players, selectedMutators, transportMode, localId, true)
                                 }
                             },
                             enabled = isStartEnabled,
@@ -232,7 +242,9 @@ fun LobbyScreen(
                                                 isConnecting = true
                                                 wifiStatusMessage = "Connecting to host..."
                                                 coroutineScope.launch {
-                                                    val clientProfile = PlayerProfile("client_${System.currentTimeMillis() % 1000}", clientName, clientAvatar)
+                                                    val newId = "client_${System.currentTimeMillis() % 10000}"
+                                                    myClientProfileId = newId
+                                                    val clientProfile = PlayerProfile(newId, clientName, clientAvatar)
                                                     val res = wifiTransport.joinHost(hostIpInput.trim(), 8998, clientProfile)
                                                     isConnecting = false
                                                     wifiStatusMessage = if (res.isSuccess) "Connected to Host!" else "Connection failed. Check IP & Wi-Fi."
@@ -266,7 +278,9 @@ fun LobbyScreen(
                                                     isConnecting = true
                                                     wifiStatusMessage = "Connecting to ${room.hostName}..."
                                                     coroutineScope.launch {
-                                                        val clientProfile = PlayerProfile("client_${System.currentTimeMillis() % 1000}", clientName, clientAvatar)
+                                                        val newId = "client_${System.currentTimeMillis() % 10000}"
+                                                        myClientProfileId = newId
+                                                        val clientProfile = PlayerProfile(newId, clientName, clientAvatar)
                                                         val res = wifiTransport.joinHost(room.hostAddress, room.port, clientProfile)
                                                         isConnecting = false
                                                         wifiStatusMessage = if (res.isSuccess) "Connected to ${room.hostName}!" else "Connection failed."
@@ -344,10 +358,17 @@ fun LobbyScreen(
                         Button(
                             onClick = {
                                 if (transportMode == TransportMode.WIFI_LAN && wifiRole == "HOST") {
-                                    val activeProfiles = connectedPeers.mapNotNull { it.profile }
-                                    onStartGame(activeProfiles.ifEmpty { players }, selectedMutators, transportMode)
+                                    val activeProfiles = connectedPeers.mapNotNull { it.profile }.ifEmpty { players }
+                                    val initialEngine = GameEngine(gamePack, activeProfiles, selectedMutators)
+                                    val startPacket = NetworkPacket.StartGame(initialEngine.state.value)
+                                    coroutineScope.launch {
+                                        wifiTransport.sendPacket(startPacket)
+                                        val hostId = activeProfiles.first().id
+                                        onStartGame(activeProfiles, selectedMutators, transportMode, hostId, true)
+                                    }
                                 } else {
-                                    onStartGame(players, selectedMutators, transportMode)
+                                    val localId = players.first().id
+                                    onStartGame(players, selectedMutators, transportMode, localId, true)
                                 }
                             },
                             enabled = isStartEnabled,

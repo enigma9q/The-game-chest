@@ -43,12 +43,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
+import com.gamechest.core.network.NetworkPacket
+import com.gamechest.core.network.WifiLanTransport
 import com.gamechest.ui.platform.PreferenceStore
 import com.gamechest.ui.theme.parseHexColor
 
 @Composable
 fun GameBoardScreen(
     engine: GameEngine,
+    wifiTransport: WifiLanTransport? = null,
+    localPlayerId: String? = null,
+    isHost: Boolean = true,
     isWifiCoop: Boolean = false,
     onExitGame: () -> Unit,
     modifier: Modifier = Modifier
@@ -69,12 +74,62 @@ fun GameBoardScreen(
     var showRollAgainBanner by remember { mutableStateOf(false) }
 
     val currentPlayer = state.players.getOrNull(state.currentTurnPlayerIndex)
+    val isMyTurn = !isWifiCoop || (currentPlayer?.profile?.id == localPlayerId)
 
-    // Quick Play Auto-Advance (Hold roll number for 1.2s before advancing)
-    LaunchedEffect(state.turnPhase, isQuickPlayEnabled, state.extraRollAwarded) {
-        if (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER && state.winnerPlayerId == null && !state.extraRollAwarded) {
+    // ==================== AUTHORITATIVE NETWORK SYNC LOOP ====================
+    LaunchedEffect(isWifiCoop, isHost, wifiTransport) {
+        if (isWifiCoop && wifiTransport != null) {
+            wifiTransport.receivedPackets.collect { packet ->
+                when (packet) {
+                    is NetworkPacket.ActionBroadcast -> {
+                        if (isHost) {
+                            when (val action = packet.action) {
+                                is GameAction.RollDice -> {
+                                    scope.launch {
+                                        isRollingAnimation = true
+                                        delay(650)
+                                        engine.rollDice(action.playerId)
+                                        isRollingAnimation = false
+                                        wifiTransport.sendPacket(NetworkPacket.StateSync(engine.state.value))
+                                    }
+                                }
+                                is GameAction.FinishTurn -> {
+                                    engine.nextTurn()
+                                    wifiTransport.sendPacket(NetworkPacket.StateSync(engine.state.value))
+                                }
+                                is GameAction.ResetGame -> {
+                                    engine.restartGame(action.keepSettings)
+                                    wifiTransport.sendPacket(NetworkPacket.StateSync(engine.state.value))
+                                }
+                            }
+                        }
+                    }
+                    is NetworkPacket.StateSync -> {
+                        if (!isHost) {
+                            val wasWaiting = (state.turnPhase == TurnPhase.WAITING_FOR_ROLL)
+                            val nowDone = (packet.sessionState.turnPhase != TurnPhase.WAITING_FOR_ROLL && packet.sessionState.currentRollResult != null)
+                            if (wasWaiting && nowDone) {
+                                isRollingAnimation = true
+                                delay(500)
+                                isRollingAnimation = false
+                            }
+                            engine.syncState(packet.sessionState)
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    // Quick Play Auto-Advance (Only Host drives turn timer in Wi-Fi Co-Op)
+    LaunchedEffect(state.turnPhase, isQuickPlayEnabled, state.extraRollAwarded, isWifiCoop, isHost) {
+        if ((!isWifiCoop || isHost) && isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER && state.winnerPlayerId == null && !state.extraRollAwarded) {
             delay(1200)
             engine.nextTurn()
+            if (isWifiCoop && isHost && wifiTransport != null) {
+                wifiTransport.sendPacket(NetworkPacket.StateSync(engine.state.value))
+            }
         }
     }
 
@@ -163,6 +218,7 @@ fun GameBoardScreen(
                 RightDiceArea(
                     state = state,
                     currentPlayer = currentPlayer,
+                    isMyTurn = isMyTurn,
                     isQuickPlayEnabled = isQuickPlayEnabled,
                     isRollingAnimation = isRollingAnimation,
                     onToggleQuickPlay = {
@@ -175,18 +231,52 @@ fun GameBoardScreen(
                             quickPlayToastText = null
                         }
                     },
-                    onNextTurn = { engine.nextTurn() },
-                    onRollDice = {
-                        scope.launch {
-                            if (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER) {
-                                engine.nextTurn()
-                                delay(100)
+                    onNextTurn = {
+                        if (isWifiCoop && !isHost) {
+                            scope.launch {
+                                wifiTransport?.sendPacket(NetworkPacket.ActionBroadcast(GameAction.FinishTurn(localPlayerId ?: "")))
                             }
-                            val activePlayer = engine.getCurrentPlayer() ?: return@launch
-                            isRollingAnimation = true
-                            delay(650)
-                            engine.rollDice(activePlayer.profile.id)
-                            isRollingAnimation = false
+                        } else {
+                            engine.nextTurn()
+                            if (isWifiCoop && isHost) {
+                                scope.launch {
+                                    wifiTransport?.sendPacket(NetworkPacket.StateSync(engine.state.value))
+                                }
+                            }
+                        }
+                    },
+                    onRollDice = {
+                        if (currentPlayer != null && (state.turnPhase == TurnPhase.WAITING_FOR_ROLL || state.turnPhase == TurnPhase.TURN_OVER)) {
+                            if (isWifiCoop) {
+                                if (isHost) {
+                                    scope.launch {
+                                        isRollingAnimation = true
+                                        delay(650)
+                                        engine.rollDice(currentPlayer.profile.id)
+                                        isRollingAnimation = false
+                                        wifiTransport?.sendPacket(NetworkPacket.StateSync(engine.state.value))
+                                    }
+                                } else {
+                                    scope.launch {
+                                        isRollingAnimation = true
+                                        wifiTransport?.sendPacket(NetworkPacket.ActionBroadcast(GameAction.RollDice(localPlayerId ?: currentPlayer.profile.id)))
+                                        delay(650)
+                                        isRollingAnimation = false
+                                    }
+                                }
+                            } else {
+                                scope.launch {
+                                    if (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER) {
+                                        engine.nextTurn()
+                                        delay(100)
+                                    }
+                                    val activePlayer = engine.getCurrentPlayer() ?: return@launch
+                                    isRollingAnimation = true
+                                    delay(650)
+                                    engine.rollDice(activePlayer.profile.id)
+                                    isRollingAnimation = false
+                                }
+                            }
                         }
                     },
                     modifier = Modifier
@@ -243,47 +333,87 @@ fun GameBoardScreen(
                 val playerColor = parseHexColor(currentPlayer?.profile?.carAvatar?.colorHex ?: "#3B82F6")
 
                 if (isWifiCoop) {
-                    // Wi-Fi Co-Op: "It is your turn to play! \n Roll the dice."
-                    Card(
-                        modifier = Modifier
-                            .border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(16.dp)),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xF01E3A8A)),
-                        shape = RoundedCornerShape(16.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    if (isMyTurn) {
+                        // Wi-Fi Co-Op: "It is your turn to play! \n Roll the dice."
+                        Card(
+                            modifier = Modifier
+                                .border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(16.dp)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xF01E3A8A)),
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF2563EB)),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.Casino,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF2563EB)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Casino,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "It is your turn to play!",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.White,
+                                        letterSpacing = 0.5.sp
+                                    )
+                                    Text(
+                                        text = "Roll the dice.",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF93C5FD)
+                                    )
+                                }
                             }
-                            Column {
-                                Text(
-                                    text = "It is your turn to play!",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color.White,
-                                    letterSpacing = 0.5.sp
-                                )
-                                Text(
-                                    text = "Roll the dice.",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF93C5FD)
-                                )
+                        }
+                    } else {
+                        // Wi-Fi Co-Op (Other player's turn): Waiting banner
+                        Card(
+                            modifier = Modifier
+                                .border(1.5.dp, playerColor, RoundedCornerShape(16.dp)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xF40F172A)),
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(playerColor),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                                Column {
+                                    Text(
+                                        text = "Waiting for turn...",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary
+                                    )
+                                    Text(
+                                        text = "${currentPlayer?.profile?.name ?: "Player"} is rolling",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = playerColor
+                                    )
+                                }
                             }
                         }
                     }
@@ -556,6 +686,7 @@ private fun LeftPlayersSidebar(
 private fun RightDiceArea(
     state: GameSessionState,
     currentPlayer: PlayerRuntimeState?,
+    isMyTurn: Boolean = true,
     isQuickPlayEnabled: Boolean,
     isRollingAnimation: Boolean,
     onToggleQuickPlay: () -> Unit,
@@ -603,7 +734,7 @@ private fun RightDiceArea(
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                         modifier = Modifier.height(28.dp)
                     ) {
-                        Text("Next >", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                        Text("NEXT RACER", fontSize = 9.sp, fontWeight = FontWeight.Black, color = Color(0xFF0F172A))
                     }
                 } else {
                     Spacer(modifier = Modifier.width(1.dp))
@@ -675,7 +806,7 @@ private fun RightDiceArea(
                         }
                     }
                 } else {
-                    val isDiceActive = (state.turnPhase == TurnPhase.WAITING_FOR_ROLL) || (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER)
+                    val isDiceActive = isMyTurn && ((state.turnPhase == TurnPhase.WAITING_FOR_ROLL) || (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER))
                     DiceRollerComponent(
                         diceSpec = state.currentActiveDiceSpec,
                         lastRoll = state.currentRollResult,

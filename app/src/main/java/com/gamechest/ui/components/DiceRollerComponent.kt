@@ -137,8 +137,8 @@ fun DiceRollerComponent(
                     modifier = Modifier.padding(horizontal = 4.dp)
                 ) {
                     Text(
-                        text = "ROLL",
-                        fontSize = 13.sp,
+                        text = if (isCurrentPlayerTurn) "ROLL" else "WAITING",
+                        fontSize = if (isCurrentPlayerTurn) 13.sp else 11.sp,
                         fontWeight = FontWeight.Black,
                         color = if (isCurrentPlayerTurn) PrimaryNeon else TextMuted,
                         letterSpacing = 1.sp

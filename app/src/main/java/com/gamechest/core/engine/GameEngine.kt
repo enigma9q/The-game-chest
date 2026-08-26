@@ -23,9 +23,15 @@ data class GameSessionState(
     val turnNumber: Int = 1
 )
 
+@kotlinx.serialization.Serializable
 sealed interface GameAction {
+    @kotlinx.serialization.Serializable
     data class RollDice(val playerId: String) : GameAction
+
+    @kotlinx.serialization.Serializable
     data class FinishTurn(val playerId: String) : GameAction
+
+    @kotlinx.serialization.Serializable
     data class ResetGame(val keepSettings: Boolean = true) : GameAction
 }
 
@@ -305,5 +311,12 @@ class GameEngine(
         val profiles = s.players.map { it.profile }
         val mutators = if (keepMutators) s.activeMutators else setOf(MutatorId.CLASSIC_GRAND_PRIX)
         _state.value = createInitialState(s.pack, profiles, mutators)
+    }
+
+    /**
+     * Authoritative Network State Synchronization for Wi-Fi Co-Op.
+     */
+    fun syncState(newState: GameSessionState) {
+        _state.value = newState
     }
 }
