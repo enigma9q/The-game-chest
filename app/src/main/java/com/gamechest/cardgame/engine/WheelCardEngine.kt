@@ -398,11 +398,12 @@ class WheelCardEngine(
             val nextVictimId = target.allSpinRemainingPlayers.firstOrNull()
 
             if (nextVictimId != null) {
-                // Continue All-Spin sequence
+                // Continue All-Spin sequence for next player
                 val nextTarget = target.copy(
                     victimPlayerId = nextVictimId,
                     allSpinRemainingPlayers = target.allSpinRemainingPlayers.drop(1)
                 )
+                val nextVictimName = s.players.find { it.profile.id == nextVictimId }?.profile?.name ?: "Player"
                 _state.value = s.copy(
                     players = mutablePlayers,
                     drawPile = mutableDeck,
@@ -410,22 +411,27 @@ class WheelCardEngine(
                     wheelSpinTarget = nextTarget,
                     lastWheelResult = spinResult,
                     turnPhase = WheelCardTurnPhase.ALL_SPIN_STEP,
-                    lastActionDescription = "$victimName drew +$totalPenalty cards! Next up: ${s.players.find { it.profile.id == nextVictimId }?.profile?.name}."
+                    lastActionDescription = "$victimName drew +$totalPenalty cards! Next spinning: $nextVictimName."
                 )
                 return
             } else {
-                // All-spin completed!
-                val desc = "$victimName drew +$totalPenalty cards. All-Spin completed!"
-                advanceTurnInternal(
-                    stateToAdvance = s.copy(
-                        players = mutablePlayers,
-                        drawPile = mutableDeck,
-                        discardPile = mutableDiscard,
-                        wheelSpinTarget = null,
-                        lastWheelResult = spinResult,
-                        lastActionDescription = desc,
-                        logHistory = listOf(desc) + s.logHistory
-                    )
+                // All-spin completed! Finish turn for the attacker and advance to next player
+                val desc = "$victimName drew +$totalPenalty cards. ALL-SPIN complete!"
+                val attackerIdx = s.players.indexOfFirst { it.profile.id == target.attackerPlayerId }.let { if (it >= 0) it else s.currentTurnPlayerIndex }
+                val nextIdx = getNextPlayerIndex(attackerIdx, s.isClockwise, s.players.size)
+
+                _state.value = s.copy(
+                    players = mutablePlayers,
+                    drawPile = mutableDeck,
+                    discardPile = mutableDiscard,
+                    wheelSpinTarget = null,
+                    lastWheelResult = spinResult,
+                    currentTurnPlayerIndex = nextIdx,
+                    turnPhase = WheelCardTurnPhase.WAITING_TO_PLAY,
+                    doublePlayActive = false,
+                    lastActionDescription = desc,
+                    logHistory = listOf(desc) + s.logHistory,
+                    turnNumber = s.turnNumber + (if (nextIdx == 0) 1 else 0)
                 )
                 return
             }

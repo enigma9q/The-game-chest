@@ -64,12 +64,13 @@ fun WheelCardGameBoardScreen(
     val currentPlayer = state.players.getOrNull(state.currentTurnPlayerIndex)
     val isMyTurn = !isWifiCoop || (currentPlayer?.profile?.id == localPlayerId)
 
-    // Sync dialog states with engine turnPhase
-    LaunchedEffect(state.turnPhase) {
+    // Sync dialog states and sequential auto-spin with engine turnPhase
+    LaunchedEffect(state.turnPhase, state.wheelSpinTarget?.victimPlayerId) {
         showColorChoiceDialog = (state.turnPhase == WheelCardTurnPhase.COLOR_PICKING && isMyTurn)
         showBetPredictionDialog = (state.turnPhase == WheelCardTurnPhase.BET_PREDICTION && isMyTurn)
 
-        if (state.turnPhase == WheelCardTurnPhase.WHEEL_SPINNING && !isWheelSpinningAnim) {
+        if ((state.turnPhase == WheelCardTurnPhase.WHEEL_SPINNING || state.turnPhase == WheelCardTurnPhase.ALL_SPIN_STEP) && !isWheelSpinningAnim) {
+            delay(600) // Brief visual pause so all players observe who is spinning
             isWheelSpinningAnim = true
         }
 
@@ -243,13 +244,16 @@ fun WheelCardGameBoardScreen(
                                 onSpinComplete = { result ->
                                     if (result == -1) {
                                         // Manual center hub spin click
-                                        if (isMyTurn && state.turnPhase == WheelCardTurnPhase.WHEEL_SPINNING) {
+                                        if (isMyTurn && (state.turnPhase == WheelCardTurnPhase.WHEEL_SPINNING || state.turnPhase == WheelCardTurnPhase.ALL_SPIN_STEP)) {
                                             isWheelSpinningAnim = true
                                         }
                                     } else {
-                                        // Spin finished
+                                        // Spin finished -> pause 1.0s to display outcome, then resolve
                                         isWheelSpinningAnim = false
-                                        engine.resolveWheelSpin(result)
+                                        scope.launch {
+                                            delay(1000)
+                                            engine.resolveWheelSpin(result)
+                                        }
                                     }
                                 },
                                 wheelSize = centerWheelSize,
@@ -412,6 +416,38 @@ fun WheelCardGameBoardScreen(
                                 Text("Player Turn", fontSize = 11.sp, color = TextSecondary)
                                 Text(currentPlayer?.profile?.name ?: "Player", fontSize = 15.sp, fontWeight = FontWeight.Black, color = playerColor)
                             }
+                        }
+                    }
+                }
+            }
+
+            // ==================== ALL-SPIN IN PROGRESS BANNER ====================
+            AnimatedVisibility(
+                visible = state.turnPhase == WheelCardTurnPhase.ALL_SPIN_STEP,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(tween(200)),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(tween(200)),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
+            ) {
+                val currentVictim = state.players.find { it.profile.id == state.wheelSpinTarget?.victimPlayerId }
+                val victimColor = parseHexColor(currentVictim?.profile?.carAvatar?.colorHex ?: "#F59E0B")
+
+                Card(
+                    modifier = Modifier.border(2.dp, AccentYellow, RoundedCornerShape(16.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xF21E1B4B)),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Groups, contentDescription = null, tint = AccentYellow, modifier = Modifier.size(24.dp))
+                        Column {
+                            Text("ALL-SPIN IN PROGRESS!", fontSize = 14.sp, fontWeight = FontWeight.Black, color = AccentYellow, letterSpacing = 0.5.sp)
+                            Text("Now spinning for ${currentVictim?.profile?.name ?: "Player"}", fontSize = 12.sp, color = victimColor, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
