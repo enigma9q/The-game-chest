@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
                             mutableStateOf(packManager.getAllPacks().first())
                         }
                         var activeEngine by remember { mutableStateOf<GameEngine?>(null) }
+                        var activeTransportMode by remember { mutableStateOf(TransportMode.SAME_DEVICE_LOCAL) }
 
                         when (currentScreen) {
                             ScreenState.LOBBY -> {
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
                                             activeMutators = mutators
                                         )
                                         activeEngine = engine
+                                        activeTransportMode = transportMode
                                         currentScreen = ScreenState.GAME_BOARD
                                     },
                                     onBrowsePacks = {
@@ -62,6 +64,7 @@ class MainActivity : ComponentActivity() {
                                 activeEngine?.let { engine ->
                                     GameBoardScreen(
                                         engine = engine,
+                                        isWifiCoop = activeTransportMode == TransportMode.WIFI_LAN,
                                         onExitGame = {
                                             activeEngine = null
                                             currentScreen = ScreenState.LOBBY

@@ -10,6 +10,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.gamechest.core.engine.GameEngine
 import com.gamechest.core.loader.GamePackManager
+import com.gamechest.core.network.TransportMode
 import com.gamechest.ui.ScreenState
 import com.gamechest.ui.components.LocalAssetProvider
 import com.gamechest.ui.editor.GamePackBrowserScreen
@@ -38,18 +39,20 @@ fun main() = application {
                         mutableStateOf(packManager.getAllPacks().first())
                     }
                     var activeEngine by remember { mutableStateOf<GameEngine?>(null) }
+                    var activeTransportMode by remember { mutableStateOf(TransportMode.SAME_DEVICE_LOCAL) }
 
                     when (currentScreen) {
                         ScreenState.LOBBY -> {
                             LobbyScreen(
                                 gamePack = selectedPack,
-                                onStartGame = { players, mutators, _ ->
+                                onStartGame = { players, mutators, transportMode ->
                                     val engine = GameEngine(
                                         initialPack = selectedPack,
                                         initialProfiles = players,
                                         activeMutators = mutators
                                     )
                                     activeEngine = engine
+                                    activeTransportMode = transportMode
                                     currentScreen = ScreenState.GAME_BOARD
                                 },
                                 onBrowsePacks = {
@@ -61,6 +64,7 @@ fun main() = application {
                             activeEngine?.let { engine ->
                                 GameBoardScreen(
                                     engine = engine,
+                                    isWifiCoop = activeTransportMode == TransportMode.WIFI_LAN,
                                     onExitGame = {
                                         activeEngine = null
                                         currentScreen = ScreenState.LOBBY

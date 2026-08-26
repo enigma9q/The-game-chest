@@ -30,6 +30,7 @@ fun DiceRollerComponent(
     lastRoll: DiceRollResult?,
     isRolling: Boolean,
     isCurrentPlayerTurn: Boolean,
+    playerName: String = "",
     extraRollAwarded: Boolean = false,
     onRollClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -96,7 +97,7 @@ fun DiceRollerComponent(
                     strokeWidth = 3.dp
                 )
             } else if (extraRollAwarded) {
-                // When 6 is rolled, 6 goes away and ROLL AGAIN! is visible on the dice
+                // When extra roll is awarded
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "ROLL",
@@ -131,19 +132,23 @@ fun DiceRollerComponent(
                     }
                 )
             } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                ) {
                     Text(
                         text = "ROLL",
-                        fontSize = 15.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Black,
                         color = if (isCurrentPlayerTurn) PrimaryNeon else TextMuted,
                         letterSpacing = 1.sp
                     )
                     Text(
-                        text = "?",
-                        fontSize = 20.sp,
+                        text = if (playerName.isNotBlank()) playerName else "?",
+                        fontSize = if (playerName.length > 7) 11.sp else 13.sp,
                         fontWeight = FontWeight.Black,
-                        color = if (isCurrentPlayerTurn) AccentYellow else TextMuted
+                        color = if (isCurrentPlayerTurn) AccentYellow else TextMuted,
+                        maxLines = 1
                     )
                 }
             }

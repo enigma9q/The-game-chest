@@ -70,6 +70,7 @@ fun RacetrackCanvas(
 
     val playerCarStates = remember { mutableStateMapOf<String, PlayerCarAnim>() }
     val lastSettledTileMap = remember { mutableStateMapOf<String, Int>() }
+    var animFrameTick by remember { mutableLongStateOf(0L) }
 
     // Initialize/sync car animation states (Start line faces EAST / 90 degrees)
     players.forEach { player ->
@@ -91,7 +92,7 @@ fun RacetrackCanvas(
         val targetTileId = player.currentTileId
 
         if (carState != null && fromTileId != targetTileId) {
-            LaunchedEffect(targetTileId) {
+            LaunchedEffect(player.profile.id, targetTileId) {
                 // 1. If restarting game to Start Line (tile 0), snap directly to start line facing EAST
                 if (targetTileId == 0) {
                     val startTile = layout.tiles.find { it.id == 0 } ?: layout.tiles.first()
@@ -100,6 +101,7 @@ fun RacetrackCanvas(
                     carState.angle = 90f
                     carState.isMoving = false
                     lastSettledTileMap[player.profile.id] = 0
+                    animFrameTick++
                     return@LaunchedEffect
                 }
 
@@ -258,6 +260,7 @@ fun RacetrackCanvas(
                     carState.posX = posX
                     carState.posY = posY
                     carState.angle = smoothedAngle
+                    animFrameTick++
                 }
 
                 carState.isMoving = false
@@ -275,6 +278,7 @@ fun RacetrackCanvas(
                 }
 
                 lastSettledTileMap[player.profile.id] = targetTileId
+                animFrameTick++
             }
         }
     }
@@ -283,13 +287,15 @@ fun RacetrackCanvas(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(20.dp))
-            .background(DarkBackground)
             .border(2.dp, BorderDark, RoundedCornerShape(20.dp))
+            .background(SurfaceDarkCard)
     ) {
+        val _renderTick = animFrameTick
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(layout) {
+                    val _activeTick = _renderTick
                     detectTapGestures { tapOffset ->
                         val canvasW = size.width
                         val canvasH = size.height

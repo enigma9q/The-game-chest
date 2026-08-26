@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gamechest.core.model.*
+import com.gamechest.core.network.DiscoveredRoom
 import com.gamechest.core.network.NetworkPacket
 import com.gamechest.core.network.NetworkPeer
 import com.gamechest.core.network.TransportMode
@@ -41,6 +42,7 @@ fun LobbyScreen(
     val isWifiConnected by wifiTransport.isConnected.collectAsState()
     val connectedPeers by wifiTransport.connectedPeers.collectAsState()
     val localIpAddress by wifiTransport.localIpAddress.collectAsState()
+    val discoveredRooms by wifiTransport.discoveredRooms.collectAsState()
 
     var transportMode by remember { mutableStateOf(TransportMode.SAME_DEVICE_LOCAL) }
     var selectedMutators by remember {
@@ -85,13 +87,20 @@ fun LobbyScreen(
         }
     }
 
-    // Automatically initialize hosting if Host mode selected
+    // Automatically manage hosting or discovery based on selected mode & role
     LaunchedEffect(transportMode, wifiRole) {
-        if (transportMode == TransportMode.WIFI_LAN && wifiRole == "HOST") {
-            val hostProfile = players.firstOrNull() ?: PlayerProfile("p1", "Host Player", CarAvatar.SPEEDSTER_RED)
-            wifiTransport.startHosting(8998, hostProfile)
-        } else if (transportMode == TransportMode.SAME_DEVICE_LOCAL) {
+        if (transportMode == TransportMode.WIFI_LAN) {
+            if (wifiRole == "HOST") {
+                wifiTransport.stopDiscovery()
+                val hostProfile = players.firstOrNull() ?: PlayerProfile("p1", "Host Player", CarAvatar.SPEEDSTER_RED)
+                wifiTransport.startHosting(8998, hostProfile)
+            } else {
+                wifiTransport.disconnect()
+                wifiTransport.startDiscovery()
+            }
+        } else {
             wifiTransport.disconnect()
+            wifiTransport.stopDiscovery()
         }
     }
 
@@ -237,31 +246,51 @@ fun LobbyScreen(
                                 if (wifiRole == "HOST") {
                                     item {
                                         Text(
-                                            text = "Connected Players (${connectedPeers.size}):",
+                                            text = "Game Server Slots (4 Max):",
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = TextPrimary
                                         )
                                     }
-                                    itemsIndexed(connectedPeers) { _, peer ->
-                                        ConnectedPeerCard(peer = peer)
+                                    // Render 4 Server Slots (Slot 1 is Host, Slots 2-4 for clients)
+                                    items(4) { slotIdx ->
+                                        val peer = connectedPeers.getOrNull(slotIdx)
+                                        ServerSlotCard(slotIndex = slotIdx, peer = peer)
                                     }
                                 } else {
-                                    item {
-                                        ClientReadyControlCard(
-                                            clientName = clientName,
-                                            clientAvatar = clientAvatar,
-                                            isReady = isClientReady,
-                                            isConnected = isWifiConnected,
-                                            onToggleReady = {
-                                                isClientReady = !isClientReady
-                                                val peerId = connectedPeers.firstOrNull { !it.isHost }?.peerId ?: "client"
-                                                coroutineScope.launch {
-                                                    wifiTransport.toggleReady(peerId, isClientReady)
+                                    if (!isWifiConnected) {
+                                        item {
+                                            DiscoveredRoomsList(
+                                                rooms = discoveredRooms,
+                                                onJoinRoom = { room ->
+                                                    isConnecting = true
+                                                    wifiStatusMessage = "Connecting to ${room.hostName}..."
+                                                    coroutineScope.launch {
+                                                        val clientProfile = PlayerProfile("client_${System.currentTimeMillis() % 1000}", clientName, clientAvatar)
+                                                        val res = wifiTransport.joinHost(room.hostAddress, room.port, clientProfile)
+                                                        isConnecting = false
+                                                        wifiStatusMessage = if (res.isSuccess) "Connected to ${room.hostName}!" else "Connection failed."
+                                                    }
                                                 }
-                                            },
-                                            onAvatarClick = { showColorDialogForPlayerIndex = 0 }
-                                        )
+                                            )
+                                        }
+                                    } else {
+                                        item {
+                                            ClientReadyControlCard(
+                                                clientName = clientName,
+                                                clientAvatar = clientAvatar,
+                                                isReady = isClientReady,
+                                                isConnected = isWifiConnected,
+                                                onToggleReady = {
+                                                    isClientReady = !isClientReady
+                                                    val peerId = connectedPeers.firstOrNull { !it.isHost }?.peerId ?: "client"
+                                                    coroutineScope.launch {
+                                                        wifiTransport.toggleReady(peerId, isClientReady)
+                                                    }
+                                                },
+                                                onAvatarClick = { showColorDialogForPlayerIndex = 0 }
+                                            )
+                                        }
                                     }
                                 }
                             } else {
@@ -410,31 +439,50 @@ fun LobbyScreen(
                         if (wifiRole == "HOST") {
                             item {
                                 Text(
-                                    text = "Connected Players (${connectedPeers.size}):",
+                                    text = "Game Server Slots (4 Max):",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary
                                 )
                             }
-                            itemsIndexed(connectedPeers) { _, peer ->
-                                ConnectedPeerCard(peer = peer)
+                            items(4) { slotIdx ->
+                                val peer = connectedPeers.getOrNull(slotIdx)
+                                ServerSlotCard(slotIndex = slotIdx, peer = peer)
                             }
                         } else {
-                            item {
-                                ClientReadyControlCard(
-                                    clientName = clientName,
-                                    clientAvatar = clientAvatar,
-                                    isReady = isClientReady,
-                                    isConnected = isWifiConnected,
-                                    onToggleReady = {
-                                        isClientReady = !isClientReady
-                                        val peerId = connectedPeers.firstOrNull { !it.isHost }?.peerId ?: "client"
-                                        coroutineScope.launch {
-                                            wifiTransport.toggleReady(peerId, isClientReady)
+                            if (!isWifiConnected) {
+                                item {
+                                    DiscoveredRoomsList(
+                                        rooms = discoveredRooms,
+                                        onJoinRoom = { room ->
+                                            isConnecting = true
+                                            wifiStatusMessage = "Connecting to ${room.hostName}..."
+                                            coroutineScope.launch {
+                                                val clientProfile = PlayerProfile("client_${System.currentTimeMillis() % 1000}", clientName, clientAvatar)
+                                                val res = wifiTransport.joinHost(room.hostAddress, room.port, clientProfile)
+                                                isConnecting = false
+                                                wifiStatusMessage = if (res.isSuccess) "Connected to ${room.hostName}!" else "Connection failed."
+                                            }
                                         }
-                                    },
-                                    onAvatarClick = { showColorDialogForPlayerIndex = 0 }
-                                )
+                                    )
+                                }
+                            } else {
+                                item {
+                                    ClientReadyControlCard(
+                                        clientName = clientName,
+                                        clientAvatar = clientAvatar,
+                                        isReady = isClientReady,
+                                        isConnected = isWifiConnected,
+                                        onToggleReady = {
+                                            isClientReady = !isClientReady
+                                            val peerId = connectedPeers.firstOrNull { !it.isHost }?.peerId ?: "client"
+                                            coroutineScope.launch {
+                                                wifiTransport.toggleReady(peerId, isClientReady)
+                                            }
+                                        },
+                                        onAvatarClick = { showColorDialogForPlayerIndex = 0 }
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -693,7 +741,7 @@ private fun WifiLanControlCard(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("HOST WI-FI IP ADDRESS:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryNeon)
+                            Text("WI-FI HOST BEACON ACTIVE:", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PrimaryNeon)
                             Text(
                                 text = "${localIpAddress ?: "127.0.0.1"}:8998",
                                 fontSize = 15.sp,
@@ -705,14 +753,14 @@ private fun WifiLanControlCard(
                             color = Color(0x3310B981),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("SERVER ACTIVE", color = NitroGreen, fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                            Text("BROADCASTING", color = NitroGreen, fontSize = 10.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                         }
                     }
                 }
             } else {
-                // Client Join Information
+                // Client Manual IP Input Fallback
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Enter Host IP Address:", fontSize = 12.sp, color = TextSecondary)
+                    Text("Manual IP Connect (Optional):", fontSize = 12.sp, color = TextSecondary)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = hostIpInput,
@@ -748,40 +796,152 @@ private fun WifiLanControlCard(
 }
 
 @Composable
-private fun ConnectedPeerCard(peer: NetworkPeer) {
+private fun DiscoveredRoomsList(
+    rooms: List<DiscoveredRoom>,
+    onJoinRoom: (DiscoveredRoom) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDarkCard),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderDark)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Nearby Rooms (Auto-Discovered):",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = PrimaryNeon)
+                    Text("Scanning Wi-Fi", fontSize = 10.sp, color = PrimaryNeon, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            if (rooms.isEmpty()) {
+                Surface(
+                    color = SurfaceDark,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Searching for active hosts on local Wi-Fi...\nMake sure the other device clicked 'Host Room'.",
+                        fontSize = 12.sp,
+                        color = TextMuted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            } else {
+                rooms.forEach { room ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, PrimaryNeon)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(room.roomName, fontSize = 14.sp, fontWeight = FontWeight.Black, color = TextPrimary)
+                                Text("${room.hostAddress}:${room.port} • ${room.currentPlayers}/${room.maxPlayers} Players", fontSize = 11.sp, color = TextSecondary)
+                            }
+                            Button(
+                                onClick = { onJoinRoom(room) },
+                                colors = ButtonDefaults.buttonColors(containerColor = NitroGreen, contentColor = Color(0xFF0F172A)),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Text("JOIN ROOM", fontWeight = FontWeight.Black, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServerSlotCard(slotIndex: Int, peer: NetworkPeer?) {
+    val isOpen = peer == null
+    val slotNumber = slotIndex + 1
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (peer.isReady || peer.isHost) NitroGreen else BorderDark)
+        colors = CardDefaults.cardColors(containerColor = if (isOpen) Color(0x221E293B) else SurfaceDark),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (peer?.isHost == true) PrimaryNeon else if (peer?.isReady == true) NitroGreen else if (!isOpen) BorderDark else Color(0x33FFFFFF)
+        )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val color = parseHexColor(peer.profile?.carAvatar?.colorHex ?: "#3B82F6")
-                Box(
-                    modifier = Modifier.size(24.dp).clip(CircleShape).background(color)
-                )
-                Column {
-                    Text(peer.displayName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text(peer.profile?.carAvatar?.displayName ?: "Racer", fontSize = 11.sp, color = TextSecondary)
+            if (peer != null) {
+                // Occupied Slot
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val color = parseHexColor(peer.profile?.carAvatar?.colorHex ?: "#3B82F6")
+                    Box(
+                        modifier = Modifier.size(26.dp).clip(CircleShape).background(color).border(1.5.dp, Color.White, CircleShape)
+                    )
+                    Column {
+                        Text("Slot $slotNumber: ${peer.displayName}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(peer.profile?.carAvatar?.displayName ?: "Racer", fontSize = 11.sp, color = TextSecondary)
+                    }
                 }
-            }
 
-            Surface(
-                color = if (peer.isHost) Color(0x3300E5FF) else if (peer.isReady) Color(0x3310B981) else Color(0x33F59E0B),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text(
-                    text = if (peer.isHost) "HOST 👑" else if (peer.isReady) "READY ✓" else "NOT READY ⏳",
-                    color = if (peer.isHost) PrimaryNeon else if (peer.isReady) NitroGreen else AccentYellow,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                Surface(
+                    color = if (peer.isHost) Color(0x3300E5FF) else if (peer.isReady) Color(0x3310B981) else Color(0x33F59E0B),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = if (peer.isHost) "👑 HOST" else if (peer.isReady) "READY ✓" else "NOT READY ⏳",
+                        color = if (peer.isHost) PrimaryNeon else if (peer.isReady) NitroGreen else AccentYellow,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            } else {
+                // Open Slot Waiting
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .border(1.5.dp, Color(0x44FFFFFF), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("$slotNumber", fontSize = 11.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                    }
+                    Text("Slot $slotNumber: Open (Waiting for player...)", fontSize = 13.sp, color = TextMuted, fontWeight = FontWeight.SemiBold)
+                }
+
+                Surface(
+                    color = Color(0x11FFFFFF),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "OPEN SLOT",
+                        color = TextMuted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
     }

@@ -16,13 +16,26 @@ enum class TransportMode {
 }
 
 @Serializable
+data class DiscoveredRoom(
+    val roomName: String,
+    val hostName: String,
+    val hostAddress: String,
+    val port: Int = 8998,
+    val currentPlayers: Int = 1,
+    val maxPlayers: Int = 4,
+    val gameTitle: String = "Rev-Up Racers",
+    val lastSeenTimestamp: Long = 0L
+)
+
+@Serializable
 data class NetworkPeer(
     val peerId: String,
     val displayName: String,
     val isHost: Boolean,
     val ipAddress: String? = null,
     val profile: PlayerProfile? = null,
-    val isReady: Boolean = false
+    val isReady: Boolean = false,
+    val slotIndex: Int = 0
 )
 
 @Serializable
@@ -61,8 +74,11 @@ interface GameTransport {
     val connectedPeers: StateFlow<List<NetworkPeer>>
     val receivedPackets: Flow<NetworkPacket>
     val localIpAddress: StateFlow<String?>
+    val discoveredRooms: StateFlow<List<DiscoveredRoom>>
 
     suspend fun startHosting(port: Int = 8998, hostProfile: PlayerProfile): Result<Unit>
+    suspend fun startDiscovery()
+    suspend fun stopDiscovery()
     suspend fun joinHost(hostAddress: String, port: Int = 8998, clientProfile: PlayerProfile): Result<Unit>
     suspend fun sendPacket(packet: NetworkPacket): Result<Unit>
     suspend fun toggleReady(peerId: String, isReady: Boolean)

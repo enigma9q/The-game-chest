@@ -24,6 +24,9 @@ class LocalTransport : GameTransport {
     private val _localIpAddress = MutableStateFlow<String?>("127.0.0.1")
     override val localIpAddress: StateFlow<String?> = _localIpAddress.asStateFlow()
 
+    private val _discoveredRooms = MutableStateFlow<List<DiscoveredRoom>>(emptyList())
+    override val discoveredRooms: StateFlow<List<DiscoveredRoom>> = _discoveredRooms.asStateFlow()
+
     override suspend fun startHosting(port: Int, hostProfile: PlayerProfile): Result<Unit> {
         _connectedPeers.value = listOf(
             NetworkPeer(
@@ -32,12 +35,16 @@ class LocalTransport : GameTransport {
                 isHost = true,
                 ipAddress = "127.0.0.1",
                 profile = hostProfile,
-                isReady = true
+                isReady = true,
+                slotIndex = 0
             )
         )
         _isConnected.value = true
         return Result.success(Unit)
     }
+
+    override suspend fun startDiscovery() {}
+    override suspend fun stopDiscovery() {}
 
     override suspend fun joinHost(hostAddress: String, port: Int, clientProfile: PlayerProfile): Result<Unit> {
         return startHosting(port, clientProfile)

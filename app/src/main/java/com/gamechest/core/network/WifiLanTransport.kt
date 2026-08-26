@@ -10,11 +10,7 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
-import java.net.Inet4Address
-import java.net.InetSocketAddress
-import java.net.NetworkInterface
-import java.net.ServerSocket
-import java.net.Socket
+import java.net.*
 import java.util.concurrent.ConcurrentHashMap
 
 class WifiLanTransport(
@@ -36,13 +32,23 @@ class WifiLanTransport(
     private val _localIpAddress = MutableStateFlow<String?>(null)
     override val localIpAddress: StateFlow<String?> = _localIpAddress.asStateFlow()
 
+    private val _discoveredRooms = MutableStateFlow<List<DiscoveredRoom>>(emptyList())
+    override val discoveredRooms: StateFlow<List<DiscoveredRoom>> = _discoveredRooms.asStateFlow()
+
     private var serverSocket: ServerSocket? = null
     private var clientSocket: Socket? = null
     private var clientWriter: BufferedWriter? = null
     private val clientWriters = ConcurrentHashMap<String, BufferedWriter>()
     private var serverJob: Job? = null
     private var clientJob: Job? = null
+    private var beaconJob: Job? = null
+    private var discoveryJob: Job? = null
     private var currentHostProfile: PlayerProfile? = null
+
+    companion object {
+        const val TCP_GAME_PORT = 8998
+        const val UDP_BEACON_PORT = 8999
+    }
 
     init {
         detectLocalIp()
@@ -74,6 +80,7 @@ class WifiLanTransport(
     override suspend fun startHosting(port: Int, hostProfile: PlayerProfile): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             disconnect()
+            stopDiscovery()
             detectLocalIp()
             currentHostProfile = hostProfile
 
@@ -84,7 +91,8 @@ class WifiLanTransport(
                 isHost = true,
                 ipAddress = hostIp,
                 profile = hostProfile,
-                isReady = true
+                isReady = true,
+                slotIndex = 0
             )
             _connectedPeers.value = listOf(hostPeer)
 
@@ -94,15 +102,43 @@ class WifiLanTransport(
             serverSocket = server
             _isConnected.value = true
 
+            // 1. Accept Client TCP Connections
             serverJob = coroutineScope.launch {
                 while (isActive && !server.isClosed) {
                     try {
                         val socket = server.accept()
                         launch { handleServerClient(socket) }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         if (server.isClosed) break
                     }
                 }
+            }
+
+            // 2. Start UDP Broadcast Beacon every 1.0 second
+            beaconJob = coroutineScope.launch {
+                val socket = try {
+                    DatagramSocket().apply { broadcast = true }
+                } catch (_: Exception) { null }
+
+                while (isActive && socket != null && !socket.isClosed) {
+                    try {
+                        val beaconData = DiscoveredRoom(
+                            roomName = "${hostProfile.name}'s Room",
+                            hostName = hostProfile.name,
+                            hostAddress = hostIp,
+                            port = port,
+                            currentPlayers = _connectedPeers.value.size,
+                            maxPlayers = 4,
+                            gameTitle = "Rev-Up Racers: Turbo Circuit",
+                            lastSeenTimestamp = System.currentTimeMillis()
+                        )
+                        val bytes = json.encodeToString(beaconData).toByteArray(Charsets.UTF_8)
+                        val packet = DatagramPacket(bytes, bytes.size, InetAddress.getByName("255.255.255.255"), UDP_BEACON_PORT)
+                        socket.send(packet)
+                    } catch (_: Exception) {}
+                    delay(1000)
+                }
+                socket?.close()
             }
 
             Result.success(Unit)
@@ -110,6 +146,55 @@ class WifiLanTransport(
             _isConnected.value = false
             Result.failure(e)
         }
+    }
+
+    override suspend fun startDiscovery() = withContext(Dispatchers.IO) {
+        if (discoveryJob?.isActive == true) return@withContext
+        _discoveredRooms.value = emptyList()
+
+        discoveryJob = coroutineScope.launch {
+            var socket: DatagramSocket? = null
+            try {
+                socket = DatagramSocket(null).apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(UDP_BEACON_PORT))
+                    soTimeout = 2000
+                }
+
+                val buffer = ByteArray(2048)
+                while (isActive && socket != null && !socket.isClosed) {
+                    try {
+                        val packet = DatagramPacket(buffer, buffer.size)
+                        socket.receive(packet)
+                        val text = String(packet.data, 0, packet.length, Charsets.UTF_8)
+                        val room = json.decodeFromString<DiscoveredRoom>(text).copy(
+                            hostAddress = packet.address.hostAddress ?: "127.0.0.1",
+                            lastSeenTimestamp = System.currentTimeMillis()
+                        )
+
+                        // Update or add discovered room
+                        val now = System.currentTimeMillis()
+                        val updated = _discoveredRooms.value
+                            .filter { now - it.lastSeenTimestamp < 3500 && it.hostAddress != room.hostAddress }
+                            .plus(room)
+                        _discoveredRooms.value = updated
+                    } catch (_: SocketTimeoutException) {
+                        // Purge expired rooms
+                        val now = System.currentTimeMillis()
+                        _discoveredRooms.value = _discoveredRooms.value.filter { now - it.lastSeenTimestamp < 3500 }
+                    } catch (_: Exception) {}
+                }
+            } catch (_: Exception) {
+            } finally {
+                socket?.close()
+            }
+        }
+    }
+
+    override suspend fun stopDiscovery() = withContext(Dispatchers.IO) {
+        discoveryJob?.cancel()
+        discoveryJob = null
+        _discoveredRooms.value = emptyList()
     }
 
     private suspend fun handleServerClient(socket: Socket) = withContext(Dispatchers.IO) {
@@ -128,13 +213,18 @@ class WifiLanTransport(
                         clientPeerId = packet.profile.id
                         clientWriters[packet.profile.id] = writer
 
+                        // Allocate next free slot (1..3)
+                        val takenSlots = _connectedPeers.value.map { it.slotIndex }.toSet()
+                        val nextSlot = (1..3).firstOrNull { !takenSlots.contains(it) } ?: (_connectedPeers.value.size)
+
                         val newPeer = NetworkPeer(
                             peerId = packet.profile.id,
                             displayName = packet.profile.name,
                             isHost = false,
                             ipAddress = socket.inetAddress.hostAddress,
                             profile = packet.profile,
-                            isReady = false
+                            isReady = false,
+                            slotIndex = nextSlot
                         )
                         _connectedPeers.value = _connectedPeers.value.filter { it.peerId != packet.profile.id } + newPeer
                         broadcastLobbyState()
@@ -152,7 +242,6 @@ class WifiLanTransport(
                         broadcastLobbyState()
                     }
                     is NetworkPacket.ActionBroadcast, is NetworkPacket.StartGame, is NetworkPacket.StateSync -> {
-                        // Relay to other clients
                         relayPacket(packet, senderId = clientPeerId)
                     }
                     is NetworkPacket.Disconnect -> {
@@ -193,8 +282,19 @@ class WifiLanTransport(
     override suspend fun joinHost(hostAddress: String, port: Int, clientProfile: PlayerProfile): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             disconnect()
+            stopDiscovery()
+
+            // Parse clean IP and port
+            var cleanHost = hostAddress.trim()
+            var targetPort = port
+            if (cleanHost.contains(":")) {
+                val parts = cleanHost.split(":")
+                cleanHost = parts[0].trim()
+                targetPort = parts.getOrNull(1)?.toIntOrNull() ?: port
+            }
+
             val socket = Socket()
-            socket.connect(InetSocketAddress(hostAddress, port), 4000)
+            socket.connect(InetSocketAddress(cleanHost, targetPort), 5000)
             clientSocket = socket
 
             val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8))
@@ -282,6 +382,13 @@ class WifiLanTransport(
 
     override suspend fun disconnect() = withContext(Dispatchers.IO) {
         try {
+            beaconJob?.cancel()
+            beaconJob = null
+            serverJob?.cancel()
+            serverJob = null
+            clientJob?.cancel()
+            clientJob = null
+
             clientWriter?.let {
                 try {
                     val disc = json.encodeToString<NetworkPacket>(NetworkPacket.Disconnect(_connectedPeers.value.firstOrNull()?.peerId ?: "")) + "\n"
@@ -289,11 +396,6 @@ class WifiLanTransport(
                     it.flush()
                 } catch (_: Exception) {}
             }
-
-            serverJob?.cancel()
-            clientJob?.cancel()
-            serverJob = null
-            clientJob = null
 
             try { serverSocket?.close() } catch (_: Exception) {}
             try { clientSocket?.close() } catch (_: Exception) {}

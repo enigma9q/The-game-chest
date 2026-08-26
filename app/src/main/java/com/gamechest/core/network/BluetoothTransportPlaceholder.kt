@@ -24,6 +24,9 @@ class BluetoothTransportPlaceholder : GameTransport {
     private val _localIpAddress = MutableStateFlow<String?>(null)
     override val localIpAddress: StateFlow<String?> = _localIpAddress.asStateFlow()
 
+    private val _discoveredRooms = MutableStateFlow<List<DiscoveredRoom>>(emptyList())
+    override val discoveredRooms: StateFlow<List<DiscoveredRoom>> = _discoveredRooms.asStateFlow()
+
     override suspend fun startHosting(port: Int, hostProfile: PlayerProfile): Result<Unit> {
         _connectedPeers.value = listOf(
             NetworkPeer(
@@ -31,12 +34,16 @@ class BluetoothTransportPlaceholder : GameTransport {
                 displayName = "${hostProfile.name} (BT Host)",
                 isHost = true,
                 profile = hostProfile,
-                isReady = true
+                isReady = true,
+                slotIndex = 0
             )
         )
         _isConnected.value = true
         return Result.success(Unit)
     }
+
+    override suspend fun startDiscovery() {}
+    override suspend fun stopDiscovery() {}
 
     override suspend fun joinHost(hostAddress: String, port: Int, clientProfile: PlayerProfile): Result<Unit> {
         _isConnected.value = true

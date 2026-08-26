@@ -49,6 +49,7 @@ import com.gamechest.ui.theme.parseHexColor
 @Composable
 fun GameBoardScreen(
     engine: GameEngine,
+    isWifiCoop: Boolean = false,
     onExitGame: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -159,44 +160,39 @@ fun GameBoardScreen(
                 }
 
                 // ==================== RIGHT: DICE AREA WITH QUICK PLAY & ROLLS LIST ====================
-                Surface(
+                RightDiceArea(
+                    state = state,
+                    currentPlayer = currentPlayer,
+                    isQuickPlayEnabled = isQuickPlayEnabled,
+                    isRollingAnimation = isRollingAnimation,
+                    onToggleQuickPlay = {
+                        val newValue = !isQuickPlayEnabled
+                        isQuickPlayEnabled = newValue
+                        PreferenceStore.setBoolean("quick_play_enabled", newValue)
+                        quickPlayToastText = if (newValue) "⚡ QUICK PLAY ACTIVATED" else "⚡ QUICK PLAY DEACTIVATED"
+                        scope.launch {
+                            delay(1500)
+                            quickPlayToastText = null
+                        }
+                    },
+                    onNextTurn = { engine.nextTurn() },
+                    onRollDice = {
+                        scope.launch {
+                            if (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER) {
+                                engine.nextTurn()
+                                delay(100)
+                            }
+                            val activePlayer = engine.getCurrentPlayer() ?: return@launch
+                            isRollingAnimation = true
+                            delay(650)
+                            engine.rollDice(activePlayer.profile.id)
+                            isRollingAnimation = false
+                        }
+                    },
                     modifier = Modifier
                         .width(245.dp)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(18.dp)),
-                    color = SurfaceDark
-                ) {
-                    RightDiceArea(
-                        state = state,
-                        currentPlayer = currentPlayer,
-                        isQuickPlayEnabled = isQuickPlayEnabled,
-                        isRollingAnimation = isRollingAnimation,
-                        onToggleQuickPlay = {
-                            val newValue = !isQuickPlayEnabled
-                            isQuickPlayEnabled = newValue
-                            PreferenceStore.setBoolean("quick_play_enabled", newValue)
-                            quickPlayToastText = if (newValue) "⚡ QUICK PLAY ACTIVATED" else "⚡ QUICK PLAY DEACTIVATED"
-                            scope.launch {
-                                delay(1500)
-                                quickPlayToastText = null
-                            }
-                        },
-                        onNextTurn = { engine.nextTurn() },
-                        onRollDice = {
-                            scope.launch {
-                                if (isQuickPlayEnabled && state.turnPhase == TurnPhase.TURN_OVER) {
-                                    engine.nextTurn()
-                                    delay(100)
-                                }
-                                val activePlayer = engine.getCurrentPlayer() ?: return@launch
-                                isRollingAnimation = true
-                                delay(500)
-                                engine.rollDice(activePlayer.profile.id)
-                                isRollingAnimation = false
-                            }
-                        }
-                    )
-                }
+                )
             }
 
             // ==================== QUICK PLAY NOTIFICATION BANNER ====================
@@ -235,7 +231,7 @@ fun GameBoardScreen(
                 }
             }
 
-            // ==================== IT IS YOUR TURN TO PLAY! BLUE BANNER ====================
+            // ==================== TURN BANNER (CO-OP vs SAME-DEVICE LOCAL) ====================
             AnimatedVisibility(
                 visible = state.turnPhase == TurnPhase.WAITING_FOR_ROLL && state.winnerPlayerId == null && !isRollingAnimation && !showRollAgainBanner,
                 enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(tween(200)),
@@ -244,46 +240,98 @@ fun GameBoardScreen(
                     .align(Alignment.TopCenter)
                     .padding(top = 12.dp)
             ) {
-                Card(
-                    modifier = Modifier
-                        .border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xF01E3A8A)),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                val playerColor = parseHexColor(currentPlayer?.profile?.carAvatar?.colorHex ?: "#3B82F6")
+
+                if (isWifiCoop) {
+                    // Wi-Fi Co-Op: "It is your turn to play! \n Roll the dice."
+                    Card(
+                        modifier = Modifier
+                            .border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(16.dp)),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xF01E3A8A)),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF2563EB)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Casino,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF2563EB)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Casino,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "It is your turn to play!",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White,
+                                    letterSpacing = 0.5.sp
+                                )
+                                Text(
+                                    text = "Roll the dice.",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF93C5FD)
+                                )
+                            }
                         }
-                        Column {
-                            Text(
-                                text = "It is your turn to play!",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White,
-                                letterSpacing = 0.5.sp
-                            )
-                            Text(
-                                text = "Roll the dice.",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF93C5FD)
-                            )
+                    }
+                } else {
+                    // Same-Device Local (Pass & Play): "Player turn \n %playername" styled with player's color
+                    Card(
+                        modifier = Modifier
+                            .border(2.dp, playerColor, RoundedCornerShape(16.dp)),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xF40F172A)),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(playerColor)
+                                    .border(2.dp, Color.White, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.DirectionsCar,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Player turn",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextSecondary,
+                                    letterSpacing = 0.5.sp
+                                )
+                                Text(
+                                    text = currentPlayer?.profile?.name ?: "Player 1",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = playerColor,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -633,6 +681,7 @@ private fun RightDiceArea(
                         lastRoll = state.currentRollResult,
                         isRolling = isRollingAnimation,
                         isCurrentPlayerTurn = isDiceActive,
+                        playerName = currentPlayer?.profile?.name ?: "",
                         extraRollAwarded = state.extraRollAwarded,
                         onRollClick = onRollDice
                     )
