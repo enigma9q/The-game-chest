@@ -65,13 +65,18 @@ fun WheelCardGameBoardScreen(
     val isMyTurn = !isWifiCoop || (currentPlayer?.profile?.id == localPlayerId)
 
     // Sync dialog states and sequential auto-spin with engine turnPhase
-    LaunchedEffect(state.turnPhase, state.wheelSpinTarget?.victimPlayerId) {
+    LaunchedEffect(state.turnPhase, state.wheelSpinTarget?.victimPlayerId, state.wheelSpinTarget?.spinsRemainingForCurrentVictim) {
         showColorChoiceDialog = (state.turnPhase == WheelCardTurnPhase.COLOR_PICKING && isMyTurn)
         showBetPredictionDialog = (state.turnPhase == WheelCardTurnPhase.BET_PREDICTION && isMyTurn)
 
         if ((state.turnPhase == WheelCardTurnPhase.WHEEL_SPINNING || state.turnPhase == WheelCardTurnPhase.ALL_SPIN_STEP) && !isWheelSpinningAnim) {
-            delay(600) // Brief visual pause so all players observe who is spinning
+            delay(500) // Brief visual pause so all players observe who is spinning
             isWheelSpinningAnim = true
+        }
+
+        if (state.turnPhase == WheelCardTurnPhase.DRAWN_CARD_WAITING) {
+            delay(3000)
+            engine.completeDrawnCardPass()
         }
 
         if (state.turnPhase == WheelCardTurnPhase.ROUND_OVER) {
@@ -200,7 +205,7 @@ fun WheelCardGameBoardScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 1. DRAW PILE (Tap to draw 1 card)
+                        val hasPlayable = engine.hasPlayableCard()
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -217,7 +222,7 @@ fun WheelCardGameBoardScreen(
                                 cardWidth = centerCardWidth,
                                 cardHeight = centerCardHeight,
                                 onClick = {
-                                    if (isMyTurn && state.turnPhase == WheelCardTurnPhase.WAITING_TO_PLAY) {
+                                    if (isMyTurn && state.turnPhase == WheelCardTurnPhase.WAITING_TO_PLAY && !hasPlayable) {
                                         engine.drawCardFromPile()
                                     }
                                 }
@@ -226,7 +231,6 @@ fun WheelCardGameBoardScreen(
 
                         Spacer(modifier = Modifier.width(if (isDesktop) 44.dp else 28.dp))
 
-                        // 2. THE CENTER INTERACTIVE WHEEL (50% BIGGER ON DESKTOP)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -243,12 +247,10 @@ fun WheelCardGameBoardScreen(
                                 targetResult = targetWheelResult,
                                 onSpinComplete = { result ->
                                     if (result == -1) {
-                                        // Manual center hub spin click
                                         if (isMyTurn && (state.turnPhase == WheelCardTurnPhase.WHEEL_SPINNING || state.turnPhase == WheelCardTurnPhase.ALL_SPIN_STEP)) {
                                             isWheelSpinningAnim = true
                                         }
                                     } else {
-                                        // Spin finished -> pause 1.0s to display outcome, then resolve
                                         isWheelSpinningAnim = false
                                         scope.launch {
                                             delay(1000)
@@ -263,7 +265,6 @@ fun WheelCardGameBoardScreen(
 
                         Spacer(modifier = Modifier.width(if (isDesktop) 44.dp else 28.dp))
 
-                        // 3. DISCARD PILE (Top Card to match)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -285,49 +286,49 @@ fun WheelCardGameBoardScreen(
                             }
 
                             val topCard = state.discardPile.lastOrNull()
-                            PlayingCardView(
-                                card = topCard,
-                                isFaceUp = true,
-                                cardWidth = centerCardWidth,
-                                cardHeight = centerCardHeight
-                            )
+                            if (topCard != null) {
+                                PlayingCardView(
+                                    card = topCard,
+                                    isFaceUp = true,
+                                    isPlayable = false,
+                                    cardWidth = centerCardWidth,
+                                    cardHeight = centerCardHeight
+                                )
+                            }
                         }
                     }
                 }
 
-                // ==================== BOTTOM: ACTIVE PLAYER HAND & ACTION BAR ====================
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Action controls: "CardWheel!" shout button & Pass Turn button
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .padding(horizontal = 16.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // "CardWheel!" Callout Button
-                        if (currentPlayer != null && currentPlayer.hand.size == 1 && !currentPlayer.calledLastCard) {
+                        if (isMyTurn && currentPlayer?.hand?.size == 1 && !currentPlayer.calledLastCard) {
                             Button(
                                 onClick = { engine.callLastCard(currentPlayer.profile.id) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                                shape = RoundedCornerShape(12.dp)
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444), contentColor = Color.White),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.padding(end = 8.dp)
                             ) {
-                                Icon(Icons.Default.Campaign, contentDescription = null)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("SHOUT CARDWHEEL!", fontWeight = FontWeight.Black)
+                                Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Shout CARDWHEEL!", fontSize = if (isDesktop) 13.sp else 12.sp, fontWeight = FontWeight.Black)
                             }
-                        } else {
-                            Spacer(modifier = Modifier.width(1.dp))
                         }
 
-                        // Pass Turn Button (if drew a card and chose not to play)
                         if (isMyTurn && state.turnPhase == WheelCardTurnPhase.WAITING_TO_PLAY) {
                             Button(
                                 onClick = { engine.passTurn() },
-                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceDarkCard, contentColor = TextSecondary),
+                                colors = ButtonDefaults.buttonColors(containerColor = cardContainerColor, contentColor = secondaryTextColor),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text("Pass Turn", fontSize = if (isDesktop) 13.sp else 12.sp)
@@ -335,10 +336,20 @@ fun WheelCardGameBoardScreen(
                         }
                     }
 
-                    // Render Local Player Hand (50% larger on desktop)
                     currentPlayer?.let { player ->
+                        val effectiveHand = remember(player.hand, state.activeColor, state.discardPile.lastOrNull(), isMyTurn) {
+                            if (player.hand.size > 9 && isMyTurn && state.turnPhase == WheelCardTurnPhase.WAITING_TO_PLAY) {
+                                player.hand.sortedWith(
+                                    compareByDescending<WheelCard> { engine.isCardPlayable(it) }
+                                        .thenBy { it.color.ordinal }
+                                        .thenBy { it.number ?: 99 }
+                                )
+                            } else {
+                                player.hand
+                            }
+                        }
                         PlayerHandRow(
-                            player = player,
+                            player = player.copy(hand = effectiveHand),
                             isCurrentTurn = isMyTurn && state.turnPhase == WheelCardTurnPhase.WAITING_TO_PLAY,
                             isCardPlayable = { card -> engine.isCardPlayable(card) },
                             cardWidth = handCardWidth,
@@ -353,157 +364,99 @@ fun WheelCardGameBoardScreen(
                 }
             }
 
-            // ==================== TURN BANNER ====================
             AnimatedVisibility(
                 visible = state.turnPhase == WheelCardTurnPhase.WAITING_TO_PLAY && state.winnerPlayerId == null,
-                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(tween(200)),
-                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(tween(200)),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 10.dp)
             ) {
                 val playerColor = parseHexColor(currentPlayer?.profile?.carAvatar?.colorHex ?: "#3B82F6")
-
-                if (isWifiCoop) {
-                    if (isMyTurn) {
-                        Card(
-                            modifier = Modifier.border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(16.dp)),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xF01E3A8A)),
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Icon(Icons.Default.Casino, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-                                Column {
-                                    Text("It is your turn to play!", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
-                                    Text("Play a matching card or draw from the pile.", fontSize = 12.sp, color = Color(0xFF93C5FD))
-                                }
-                            }
-                        }
-                    } else {
-                        Card(
-                            modifier = Modifier.border(1.5.dp, playerColor, RoundedCornerShape(16.dp)),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xF40F172A)),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                Text("Waiting for ${currentPlayer?.profile?.name ?: "Player"} to play...", fontSize = 13.sp, color = playerColor, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                } else {
-                    Card(
-                        modifier = Modifier.border(2.dp, playerColor, RoundedCornerShape(16.dp)),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xF40F172A)),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            Column {
-                                Text("Player Turn", fontSize = 11.sp, color = TextSecondary)
-                                Text(currentPlayer?.profile?.name ?: "Player", fontSize = 15.sp, fontWeight = FontWeight.Black, color = playerColor)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ==================== ALL-SPIN IN PROGRESS BANNER ====================
-            AnimatedVisibility(
-                visible = state.turnPhase == WheelCardTurnPhase.ALL_SPIN_STEP,
-                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(tween(200)),
-                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(tween(200)),
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 10.dp)
-            ) {
-                val currentVictim = state.players.find { it.profile.id == state.wheelSpinTarget?.victimPlayerId }
-                val victimColor = parseHexColor(currentVictim?.profile?.carAvatar?.colorHex ?: "#F59E0B")
-
                 Card(
-                    modifier = Modifier.border(2.dp, AccentYellow, RoundedCornerShape(16.dp)),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xF21E1B4B)),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                    modifier = Modifier.border(2.dp, playerColor, RoundedCornerShape(16.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xF40F172A)),
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Default.Groups, contentDescription = null, tint = AccentYellow, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                         Column {
-                            Text("ALL-SPIN IN PROGRESS!", fontSize = 14.sp, fontWeight = FontWeight.Black, color = AccentYellow, letterSpacing = 0.5.sp)
-                            Text("Now spinning for ${currentVictim?.profile?.name ?: "Player"}", fontSize = 12.sp, color = victimColor, fontWeight = FontWeight.Bold)
+                            Text("Player Turn", fontSize = 11.sp, color = secondaryTextColor)
+                            Text(currentPlayer?.profile?.name ?: "Player", fontSize = 15.sp, fontWeight = FontWeight.Black, color = playerColor)
                         }
                     }
                 }
             }
 
-            // ==================== SPIN SHIELD (7) REFLEX COUNTER BANNER ====================
-            if (state.turnPhase == WheelCardTurnPhase.SPIN_SHIELD_PROMPT) {
+            if (state.turnPhase == WheelCardTurnPhase.SPIN_STACK_PROMPT || state.turnPhase == WheelCardTurnPhase.SPIN_SHIELD_PROMPT) {
                 val target = state.wheelSpinTarget
                 val victimPlayer = state.players.find { it.profile.id == target?.victimPlayerId }
+                val spinCardsInHand = victimPlayer?.hand?.filter { it.type == CardType.BASIC_SPIN || it.type == CardType.SUPER_SPIN } ?: emptyList()
                 val shieldCard = victimPlayer?.hand?.find { it.isSpinShield }
+                val isVictimLocal = !isWifiCoop || (victimPlayer?.profile?.id == localPlayerId)
 
-                AlertDialog(
-                    onDismissRequest = { engine.respondWithSpinShield(false) },
-                    containerColor = Color(0xFF1E1B4B),
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Default.Shield, contentDescription = null, tint = Color(0xFFFDE047))
-                            Text("SPIN SHIELD ALERT!", color = Color.White, fontWeight = FontWeight.Black)
+                if (isVictimLocal) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        containerColor = Color(0xFF1E1B4B),
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Bolt, contentDescription = null, tint = AccentYellow)
+                                Text(
+                                    text = if ((target?.stackedSpins ?: 1) > 1) "SPIN STACK ATTACK! (${target?.stackedSpins} Spins)" else "WHEEL SPIN ATTACK!",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = "You are targeted for ${target?.stackedSpins ?: 1} Wheel spin(s)! You can counter with a Spin card to pile up the spins or use a 7 Shield to deflect.",
+                                    color = Color(0xFFE2E8F0),
+                                    fontSize = 14.sp
+                                )
+
+                                if (spinCardsInHand.isNotEmpty()) {
+                                    Text("Stack a Spin Card (+1 Spin to next player):", color = AccentYellow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        spinCardsInHand.forEach { card ->
+                                            Button(
+                                                onClick = { engine.respondWithSpinStack(stackCardId = card.id) },
+                                                colors = ButtonDefaults.buttonColors(containerColor = parseHexColor(card.color.hexColor), contentColor = Color.White),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text("⚡ Stack ${card.color.displayName} ${card.type.displayName}", fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            if (shieldCard != null) {
+                                Button(
+                                    onClick = { engine.respondWithSpinStack(useShieldId = shieldCard.id) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = Color(0xFF0F172A))
+                                ) {
+                                    Text("🛡️ DEFLECT WITH 7 SHIELD", fontWeight = FontWeight.Black)
+                                }
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { engine.respondWithSpinStack() }) {
+                                Text("Take ${target?.stackedSpins ?: 1} Spin(s)", color = TextMuted, fontWeight = FontWeight.Bold)
+                            }
                         }
-                    },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(
-                                text = "You are being forced to spin the Wheel! You hold a Number 7 Spin Shield in your hand.",
-                                color = Color(0xFFE2E8F0),
-                                fontSize = 14.sp
-                            )
-                            Text(
-                                text = "Would you like to play your 7 to deflect the penalty back to the attacker?",
-                                color = Color(0xFFFDE047),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = { engine.respondWithSpinShield(true, shieldCard?.id) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = Color(0xFF0F172A))
-                        ) {
-                            Text("🛡️ DEFLECT WITH 7 SHIELD", fontWeight = FontWeight.Black)
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { engine.respondWithSpinShield(false) }) {
-                            Text("Take Spin Penalty", color = TextMuted)
-                        }
-                    }
-                )
+                    )
+                }
             }
 
-            // ==================== COLOR CHOICE WILD DIALOG ====================
             if (showColorChoiceDialog) {
                 AlertDialog(
                     onDismissRequest = {},
-                    containerColor = SurfaceDarkCard,
                     title = {
                         Text("Choose Next Color", color = TextPrimary, fontWeight = FontWeight.Black)
                     },

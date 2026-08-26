@@ -22,8 +22,10 @@ enum class WheelCardTurnPhase {
     COLOR_PICKING,
     WHEEL_SPINNING,
     SPIN_SHIELD_PROMPT,
+    SPIN_STACK_PROMPT,
     BET_PREDICTION,
     ALL_SPIN_STEP,
+    DRAWN_CARD_WAITING,
     ROUND_OVER
 }
 
@@ -31,11 +33,13 @@ enum class WheelCardTurnPhase {
 data class WheelSpinTarget(
     val attackerPlayerId: String,
     val victimPlayerId: String,
+    val stackedSpins: Int = 1,
     val bonusCards: Int = 0,
     val isSuperSpin: Boolean = false,
     val isBet: Boolean = false,
     val betGuess: Int? = null,
-    val allSpinRemainingPlayers: List<String> = emptyList()
+    val allSpinRemainingPlayers: List<String> = emptyList(),
+    val spinsRemainingForCurrentVictim: Int = 1
 )
 
 @Serializable
@@ -151,18 +155,33 @@ class WheelCardEngine(
             }
             CardType.DIRECTION_REVERSE -> {
                 val newDirection = !s.isClockwise
-                val desc = "${curP.profile.name} played Direction Reverse! Play direction is now ${if (newDirection) "Clockwise" else "Counter-Clockwise"}."
-                advanceTurnInternal(
-                    stateToAdvance = s.copy(
+                if (s.players.size == 2) {
+                    // In a 2-player game, Reverse acts as a SKIP, giving the same player another turn!
+                    val desc = "🔄 ${curP.profile.name} played Reverse! (2-Player: Skip! ${curP.profile.name} plays again!)"
+                    _state.value = s.copy(
                         players = updatedPlayers,
                         discardPile = newDiscard,
                         activeColor = newActiveColor,
                         isClockwise = newDirection,
+                        doublePlayActive = false,
                         lastActionDescription = desc,
                         logHistory = listOf(desc) + s.logHistory
                     )
-                )
-                return true
+                    return true
+                } else {
+                    val desc = "${curP.profile.name} played Direction Reverse! Play direction is now ${if (newDirection) "Clockwise" else "Counter-Clockwise"}."
+                    advanceTurnInternal(
+                        stateToAdvance = s.copy(
+                            players = updatedPlayers,
+                            discardPile = newDiscard,
+                            activeColor = newActiveColor,
+                            isClockwise = newDirection,
+                            lastActionDescription = desc,
+                            logHistory = listOf(desc) + s.logHistory
+                        )
+                    )
+                    return true
+                }
             }
             CardType.DOUBLE_PLAY -> {
                 // Double Play (+1 card) allows immediately playing a second card!
@@ -184,19 +203,27 @@ class WheelCardEngine(
                 val target = WheelSpinTarget(
                     attackerPlayerId = curP.profile.id,
                     victimPlayerId = victimPlayer.profile.id,
+                    stackedSpins = 1,
                     bonusCards = if (isSuper) 2 else 0,
-                    isSuperSpin = isSuper
+                    isSuperSpin = isSuper,
+                    spinsRemainingForCurrentVictim = 1
                 )
 
-                // Check if victim has a Spin Shield (Number 7)
+                // Check if victim can Stack Spin or use Spin Shield (Number 7)
+                val hasSpinCard = victimPlayer.hand.any { it.type == CardType.BASIC_SPIN || it.type == CardType.SUPER_SPIN }
                 val hasShield = victimPlayer.hand.any { it.isSpinShield }
+
+                val nextPhase = when {
+                    hasSpinCard || hasShield -> WheelCardTurnPhase.SPIN_STACK_PROMPT
+                    else -> WheelCardTurnPhase.WHEEL_SPINNING
+                }
 
                 _state.value = s.copy(
                     players = updatedPlayers,
                     discardPile = newDiscard,
                     activeColor = newActiveColor,
                     wheelSpinTarget = target,
-                    turnPhase = if (hasShield) WheelCardTurnPhase.SPIN_SHIELD_PROMPT else WheelCardTurnPhase.WHEEL_SPINNING,
+                    turnPhase = nextPhase,
                     lastActionDescription = "${curP.profile.name} played ${if (isSuper) "Super Spin (+2 bonus)" else "Basic Spin"} on ${victimPlayer.profile.name}!"
                 )
                 return true
@@ -275,28 +302,32 @@ class WheelCardEngine(
     }
 
     /**
-     * Spin Shield Counter Response (plays a 7 out-of-turn to deflect the spin back to attacker).
+     * Spin Stack & Counter Response:
+     * - stackCardId: Play a spin card from hand to pile on and pass to next player
+     * - useShieldId: Play 7 Spin Shield to deflect all accumulated spins back to attacker
+     * - (both null): Accept spins and proceed to wheel spinning
      */
-    fun respondWithSpinShield(useShield: Boolean, cardId: String? = null) {
+    fun respondWithSpinStack(stackCardId: String? = null, useShieldId: String? = null) {
         val s = _state.value
-        if (s.turnPhase != WheelCardTurnPhase.SPIN_SHIELD_PROMPT) return
+        if (s.turnPhase != WheelCardTurnPhase.SPIN_STACK_PROMPT && s.turnPhase != WheelCardTurnPhase.SPIN_SHIELD_PROMPT) return
         val target = s.wheelSpinTarget ?: return
 
-        if (useShield && cardId != null) {
-            val victimIdx = s.players.indexOfFirst { it.profile.id == target.victimPlayerId }
-            val victim = s.players[victimIdx]
-            val shieldCard = victim.hand.find { it.id == cardId && it.isSpinShield }
+        val victimIdx = s.players.indexOfFirst { it.profile.id == target.victimPlayerId }
+        val victim = s.players[victimIdx]
 
+        if (useShieldId != null) {
+            val shieldCard = victim.hand.find { it.id == useShieldId && it.isSpinShield }
             if (shieldCard != null) {
-                val newHand = victim.hand.filter { it.id != cardId }
+                val newHand = victim.hand.filter { it.id != useShieldId }
                 val updatedPlayers = s.players.toMutableList().also {
                     it[victimIdx] = victim.copy(hand = newHand)
                 }
 
-                // Deflect spin back to attacker!
+                // Deflect all stacked spins back to attacker!
                 val reflectedTarget = target.copy(
                     victimPlayerId = target.attackerPlayerId,
-                    attackerPlayerId = target.victimPlayerId
+                    attackerPlayerId = target.victimPlayerId,
+                    spinsRemainingForCurrentVictim = target.stackedSpins
                 )
 
                 _state.value = s.copy(
@@ -304,16 +335,71 @@ class WheelCardEngine(
                     discardPile = s.discardPile + shieldCard,
                     wheelSpinTarget = reflectedTarget,
                     turnPhase = WheelCardTurnPhase.WHEEL_SPINNING,
-                    lastActionDescription = "🛡️ ${victim.profile.name} played 7 SPIN SHIELD! Deflected back to ${s.players.find { it.profile.id == target.attackerPlayerId }?.profile?.name}!"
+                    lastActionDescription = "🛡️ ${victim.profile.name} played 7 SPIN SHIELD! Deflected ${target.stackedSpins} spin(s) back to ${s.players.find { it.profile.id == target.attackerPlayerId }?.profile?.name}!"
                 )
                 return
             }
         }
 
-        // Declined or no shield -> proceed to spinning
+        if (stackCardId != null) {
+            val spinCard = victim.hand.find { it.id == stackCardId && (it.type == CardType.BASIC_SPIN || it.type == CardType.SUPER_SPIN) }
+            if (spinCard != null) {
+                val newHand = victim.hand.filter { it.id != stackCardId }
+                val updatedPlayers = s.players.toMutableList().also {
+                    it[victimIdx] = victim.copy(hand = newHand)
+                }
+
+                val isSuper = spinCard.type == CardType.SUPER_SPIN
+                val nextVictimIdx = getNextPlayerIndex(victimIdx, s.isClockwise, s.players.size)
+                val nextVictim = updatedPlayers[nextVictimIdx]
+
+                val newStackedSpins = target.stackedSpins + 1
+                val newBonus = target.bonusCards + (if (isSuper) 2 else 0)
+
+                val nextTarget = target.copy(
+                    attackerPlayerId = victim.profile.id,
+                    victimPlayerId = nextVictim.profile.id,
+                    stackedSpins = newStackedSpins,
+                    bonusCards = newBonus,
+                    spinsRemainingForCurrentVictim = newStackedSpins
+                )
+
+                val nextHasSpin = nextVictim.hand.any { it.type == CardType.BASIC_SPIN || it.type == CardType.SUPER_SPIN }
+                val nextHasShield = nextVictim.hand.any { it.isSpinShield }
+
+                val nextPhase = when {
+                    nextHasSpin || nextHasShield -> WheelCardTurnPhase.SPIN_STACK_PROMPT
+                    else -> WheelCardTurnPhase.WHEEL_SPINNING
+                }
+
+                _state.value = s.copy(
+                    players = updatedPlayers,
+                    discardPile = s.discardPile + spinCard,
+                    wheelSpinTarget = nextTarget,
+                    turnPhase = nextPhase,
+                    lastActionDescription = "⚡ ${victim.profile.name} stacked a Spin card! Total: $newStackedSpins spins targeting ${nextVictim.profile.name}!"
+                )
+                return
+            }
+        }
+
+        // Accept spins -> Start spinning for all stacked spins
         _state.value = s.copy(
-            turnPhase = WheelCardTurnPhase.WHEEL_SPINNING
+            wheelSpinTarget = target.copy(spinsRemainingForCurrentVictim = target.stackedSpins),
+            turnPhase = WheelCardTurnPhase.WHEEL_SPINNING,
+            lastActionDescription = "${victim.profile.name} must take ${target.stackedSpins} spin(s) of penalty!"
         )
+    }
+
+    /**
+     * Spin Shield Counter Response backward compatibility.
+     */
+    fun respondWithSpinShield(useShield: Boolean, cardId: String? = null) {
+        if (useShield && cardId != null) {
+            respondWithSpinStack(useShieldId = cardId)
+        } else {
+            respondWithSpinStack()
+        }
     }
 
     /**
@@ -437,41 +523,67 @@ class WheelCardEngine(
             }
         }
 
-        // Standard Basic/Super Spin
+        // Standard Basic/Super Spin with Multi-Spin Stack Support
         val victimIdx = s.players.indexOfFirst { it.profile.id == target.victimPlayerId }
         val victim = s.players[victimIdx]
-        val totalPenalty = spinResult + target.bonusCards
+        val totalPenalty = spinResult + (if (target.spinsRemainingForCurrentVictim == target.stackedSpins) target.bonusCards else 0)
 
         val cardsDrawn = drawCardsFromDeck(totalPenalty, mutableDeck, mutableDiscard)
         mutablePlayers[victimIdx] = victim.copy(hand = victim.hand + cardsDrawn)
 
+        val remainingSpins = target.spinsRemainingForCurrentVictim - 1
+
         val desc = if (spinResult == 6) {
             "💣 BOOM! Wheel landed on the BOMB! ${victim.profile.name} drew +$totalPenalty cards!"
-        } else if (spinResult == 0 && target.bonusCards == 0) {
+        } else if (spinResult == 0) {
             "🍀 LUCKY ESCAPE! Wheel landed on 0! ${victim.profile.name} drew 0 penalty cards!"
         } else {
-            "🎡 Wheel landed on +$spinResult${if (target.bonusCards > 0) " (+2 Super Spin bonus)" else ""}! ${victim.profile.name} drew +$totalPenalty cards."
+            "🎡 Wheel landed on +$spinResult! ${victim.profile.name} drew +$totalPenalty cards."
         }
 
-        advanceTurnInternal(
-            stateToAdvance = s.copy(
+        if (remainingSpins > 0) {
+            // More stacked spins remaining for this victim!
+            _state.value = s.copy(
                 players = mutablePlayers,
                 drawPile = mutableDeck,
                 discardPile = mutableDiscard,
-                wheelSpinTarget = null,
+                wheelSpinTarget = target.copy(spinsRemainingForCurrentVictim = remainingSpins),
                 lastWheelResult = spinResult,
-                lastActionDescription = desc,
-                logHistory = listOf(desc) + s.logHistory
+                turnPhase = WheelCardTurnPhase.WHEEL_SPINNING,
+                lastActionDescription = "$desc ($remainingSpins more spin(s) left!)"
             )
-        )
+        } else {
+            // All stacked spins finished!
+            advanceTurnInternal(
+                stateToAdvance = s.copy(
+                    players = mutablePlayers,
+                    drawPile = mutableDeck,
+                    discardPile = mutableDiscard,
+                    wheelSpinTarget = null,
+                    lastWheelResult = spinResult,
+                    lastActionDescription = desc,
+                    logHistory = listOf(desc) + s.logHistory
+                )
+            )
+        }
     }
 
     /**
-     * Draws 1 card from the draw pile on player turn when having no playable cards.
+     * Checks if current player holds any playable card in hand.
+     */
+    fun hasPlayableCard(): Boolean {
+        return currentPlayer.hand.any { isCardPlayable(it) }
+    }
+
+    /**
+     * Draws 1 card from the draw pile. Blocked if player already holds a playable card.
      */
     fun drawCardFromPile(): WheelCard? {
         val s = _state.value
         if (s.turnPhase != WheelCardTurnPhase.WAITING_TO_PLAY) return null
+
+        // Cannot draw if player already has something to play!
+        if (hasPlayableCard()) return null
 
         var mutableDeck = s.drawPile.toMutableList()
         var mutableDiscard = s.discardPile.toMutableList()
@@ -485,28 +597,42 @@ class WheelCardEngine(
         val isPlayable = drawn.matches(topDiscardCard, s.activeColor)
 
         if (!isPlayable) {
-            // Cannot play drawn card -> turn ends automatically
-            val desc = "${curP.profile.name} drew 1 card and passed."
-            advanceTurnInternal(
-                stateToAdvance = s.copy(
-                    players = s.players.toMutableList().also { it[curIdx] = curP.copy(hand = newHand) },
-                    drawPile = mutableDeck,
-                    discardPile = mutableDiscard,
-                    lastActionDescription = desc,
-                    logHistory = listOf(desc) + s.logHistory
-                )
-            )
-        } else {
-            // Can play -> keep turn active so player can play it or pass
+            // Unplayable -> Enter DRAWN_CARD_WAITING for 3 seconds so player sees the drawn card
+            val desc = "⏳ ${curP.profile.name} drew ${drawn.color.displayName} ${drawn.type.displayName} (Unplayable) - Passing turn in 3s..."
             _state.value = s.copy(
                 players = s.players.toMutableList().also { it[curIdx] = curP.copy(hand = newHand) },
                 drawPile = mutableDeck,
                 discardPile = mutableDiscard,
-                lastActionDescription = "${curP.profile.name} drew a playable card!"
+                turnPhase = WheelCardTurnPhase.DRAWN_CARD_WAITING,
+                lastActionDescription = desc,
+                logHistory = listOf("${curP.profile.name} drew 1 unplayable card.") + s.logHistory
+            )
+        } else {
+            // Playable -> keep turn active so player can play it or choose to pass
+            _state.value = s.copy(
+                players = s.players.toMutableList().also { it[curIdx] = curP.copy(hand = newHand) },
+                drawPile = mutableDeck,
+                discardPile = mutableDiscard,
+                lastActionDescription = "✨ ${curP.profile.name} drew a playable ${drawn.color.displayName} ${drawn.type.displayName}!"
             )
         }
 
         return drawn
+    }
+
+    /**
+     * Completes automatic turn pass after 3s waiting on unplayable drawn card.
+     */
+    fun completeDrawnCardPass() {
+        val s = _state.value
+        if (s.turnPhase != WheelCardTurnPhase.DRAWN_CARD_WAITING) return
+        val desc = "${currentPlayer.profile.name} passed turn."
+        advanceTurnInternal(
+            stateToAdvance = s.copy(
+                turnPhase = WheelCardTurnPhase.WAITING_TO_PLAY,
+                lastActionDescription = desc
+            )
+        )
     }
 
     /**
