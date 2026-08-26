@@ -120,19 +120,18 @@ fun PlayingCardView(
     val scale = if (isSelected) 1.08f else 1.0f
 
     Surface(
+        onClick = { onClick?.invoke() },
+        enabled = onClick != null,
+        shape = cardShape,
+        shadowElevation = elevation,
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isPlayable) 3.5.dp else 1.5.dp,
+            color = if (isPlayable) Color(0xFF00E5FF).copy(alpha = pulseGlow) else Color.White.copy(alpha = 0.3f)
+        ),
+        color = Color(0xFF0F172A),
         modifier = modifier
             .size(cardWidth, cardHeight)
             .scale(scale)
-            .shadow(elevation, cardShape)
-            .clip(cardShape)
-            .border(
-                width = if (isPlayable) 3.dp else 1.5.dp,
-                color = if (isPlayable) Color(0xFF00E5FF).copy(alpha = pulseGlow) else Color.White.copy(alpha = 0.3f),
-                shape = cardShape
-            )
-            .clickable(enabled = onClick != null) { onClick?.invoke() },
-        shape = cardShape,
-        color = Color(0xFF0F172A)
     ) {
         Box(
             modifier = Modifier

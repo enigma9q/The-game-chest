@@ -9,13 +9,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +28,11 @@ import com.gamechest.cardgame.engine.WheelCardPlayer
 import com.gamechest.cardgame.model.WheelCard
 import com.gamechest.ui.theme.*
 
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.launch
+
 @Composable
 fun PlayerHandRow(
     player: WheelCardPlayer,
@@ -38,13 +43,13 @@ fun PlayerHandRow(
     cardHeight: androidx.compose.ui.unit.Dp = 114.dp,
     modifier: Modifier = Modifier
 ) {
-    var selectedCardId by remember { mutableStateOf<String?>(null) }
-    val scrollState = rememberScrollState()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Player Info Ribbon
@@ -66,7 +71,7 @@ fun PlayerHandRow(
             }
             Text(
                 text = "${player.profile.name} (Your Hand: ${player.hand.size} cards)",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Black,
                 color = if (isCurrentTurn) PrimaryNeon else TextSecondary
             )
@@ -86,40 +91,85 @@ fun PlayerHandRow(
             }
         }
 
-        // Horizontal Scrollable / Overlapping Cards
+        // Horizontal Scrollable Cards with Left & Right Arrow Buttons
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(scrollState)
                 .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.Bottom
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
-            player.hand.forEach { card ->
-                val playable = isCurrentTurn && isCardPlayable(card)
-                val isSelected = selectedCardId == card.id
+            // Left Scroll Button
+            IconButton(
+                onClick = {
+                    scope.launch {
+                        val prevIndex = (listState.firstVisibleItemIndex - 3).coerceAtLeast(0)
+                        listState.animateScrollToItem(prevIndex)
+                    }
+                },
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceDarkCard.copy(alpha = 0.9f))
+                    .border(1.dp, Color(0x44FFFFFF), CircleShape)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Scroll Left", tint = Color.White, modifier = Modifier.size(26.dp))
+            }
 
-                Box(
-                    modifier = Modifier
-                        .offset(y = if (isSelected) (-16).dp else if (playable) (-6).dp else 0.dp)
-                        .padding(horizontal = 3.dp)
+            Spacer(modifier = Modifier.width(6.dp))
+
+            // LazyRow with items and auto-spacing
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                LazyRow(
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    PlayingCardView(
-                        card = card,
-                        isFaceUp = true,
-                        isPlayable = playable,
-                        isSelected = isSelected,
-                        cardWidth = cardWidth,
-                        cardHeight = cardHeight,
-                        onClick = {
-                            if (playable) {
-                                onPlayCard(card)
-                            } else {
-                                selectedCardId = if (isSelected) null else card.id
-                            }
+                    itemsIndexed(player.hand, key = { _, card -> card.id }) { _, card ->
+                        val playable = isCurrentTurn && isCardPlayable(card)
+
+                        Box(
+                            modifier = Modifier
+                                .offset(y = if (playable) (-8).dp else 0.dp)
+                                .padding(vertical = 4.dp)
+                        ) {
+                            PlayingCardView(
+                                card = card,
+                                isFaceUp = true,
+                                isPlayable = playable,
+                                isSelected = false,
+                                cardWidth = cardWidth,
+                                cardHeight = cardHeight,
+                                onClick = {
+                                    if (playable) {
+                                        onPlayCard(card)
+                                    }
+                                }
+                            )
                         }
-                    )
+                    }
                 }
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            // Right Scroll Button
+            IconButton(
+                onClick = {
+                    scope.launch {
+                        val nextIndex = (listState.firstVisibleItemIndex + 3).coerceAtMost((player.hand.size - 1).coerceAtLeast(0))
+                        listState.animateScrollToItem(nextIndex)
+                    }
+                },
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceDarkCard.copy(alpha = 0.9f))
+                    .border(1.dp, Color(0x44FFFFFF), CircleShape)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Scroll Right", tint = Color.White, modifier = Modifier.size(26.dp))
             }
         }
     }
